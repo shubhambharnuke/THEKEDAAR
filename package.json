@@ -1,0 +1,29 @@
+{
+  "name": "thekedar-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "THEKEDAR - College Resource Booking & Permission Management System",
+  "workspaces": [
+    "apps/*",
+    "contracts"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build:web": "npm run build --workspace=apps/web",
+    "lint:web": "npm run lint --workspace=apps/web",
+    "test:web": "npm run test --workspace=apps/web",
+    "compile:contracts": "npm run compile --workspace=contracts",
+    "test:contracts": "npm run test --workspace=contracts"
+  },
+  "keywords": [
+    "resource-booking",
+    "fastapi",
+    "nextjs",
+    "ethereum",
+    "sepolia",
+    "better-auth",
+    "solidity"
+  ],
+  "author": "THEKEDAR Team",
+  "license": "ISC"
+}
