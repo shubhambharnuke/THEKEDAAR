@@ -37,9 +37,16 @@ htmlcov/
 dist/
 build/
 
-# Local Storage
+# Local Storage & Database
 backend/storage/letters/*.pdf
 !backend/storage/letters/.gitkeep
+*.db
+*.sqlite
+*.sqlite3
+backend/data/
+local.db
+graphify-out/
+*.tsbuildinfo
 
 # IDEs & System files
 .vscode/

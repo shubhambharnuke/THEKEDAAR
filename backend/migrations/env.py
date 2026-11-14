@@ -25,14 +25,20 @@ if config.config_file_name is not None:
 # Target metadata for autogenerate support
 target_metadata = Base.metadata
 
-# Normalize URL for psycopg2
-db_url = settings.DATABASE_URL
+# Normalize URL
+db_url = settings.DATABASE_URL.strip()
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
 elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
     db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-config.set_main_option("sqlalchemy.url", db_url)
+if db_url.startswith("sqlite") and ":///" in db_url:
+    sqlite_file = db_url.split(":///", 1)[1]
+    db_file_path = Path(sqlite_file)
+    if db_file_path.parent:
+        db_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:

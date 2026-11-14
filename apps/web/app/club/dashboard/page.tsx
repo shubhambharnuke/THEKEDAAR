@@ -13,7 +13,9 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/Table";
-import { Plus, ArrowUpRight, Calendar, Users, CheckCircle2 } from "lucide-react";
+import { Plus, ArrowUpRight, Calendar, Users, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { thekedarApi } from "@/lib/api";
+import { useSession } from "@/lib/auth-client";
 
 interface EventSummary {
   id: number;
@@ -26,38 +28,54 @@ interface EventSummary {
 }
 
 export default function ClubDashboardPage() {
-  const [events, setEvents] = React.useState<EventSummary[]>([
-    {
-      id: 1,
-      title: "Annual Tech Symposium & Hackathon",
-      status: "APPROVED",
-      expected_attendance: 450,
-      total_departments: 2,
-      approved_departments: 2,
-      created_at: "2026-10-25T10:00:00Z",
-    },
-    {
-      id: 2,
-      title: "Robotics Design Sprint Workshop",
-      status: "PARTIALLY_APPROVED",
-      expected_attendance: 120,
-      total_departments: 2,
-      approved_departments: 1,
-      created_at: "2026-10-26T14:30:00Z",
-    },
-    {
-      id: 3,
-      title: "Guest Lecture on Cryptographic Zero-Knowledge",
-      status: "PENDING",
-      expected_attendance: 75,
-      total_departments: 1,
-      approved_departments: 0,
-      created_at: "2026-10-27T08:15:00Z",
-    },
-  ]);
+  const { data: sessionData } = useSession();
+  const [events, setEvents] = React.useState<EventSummary[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    thekedarApi
+      .getEvents()
+      .then((data) => {
+        if (isMounted) {
+          // Format event data
+          const formatted = (data || []).map((ev: any) => {
+            const reqs = ev.department_requests || [];
+            const approved = reqs.filter((r: any) => r.status === "APPROVED").length;
+            return {
+              id: ev.id,
+              title: ev.title,
+              status: ev.status,
+              expected_attendance: ev.expected_attendance || 0,
+              total_departments: ev.total_departments !== undefined ? ev.total_departments : reqs.length,
+              approved_departments: ev.approved_departments !== undefined ? ev.approved_departments : approved,
+              created_at: ev.created_at || new Date().toISOString(),
+            };
+          });
+          setEvents(formatted);
+          setError(null);
+        }
+      })
+      .catch((err: any) => {
+        if (isMounted) {
+          setError(err?.message || "Failed to load events from server.");
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const userName = sessionData?.user?.full_name || "Club Representative";
+  const userEmail = sessionData?.user?.email || "club@college.edu";
 
   return (
-    <AppShell userRole="STUDENT_CLUB" userName="ACM Chapter Lead" userEmail="acm.lead@college.edu">
+    <AppShell userRole="STUDENT_CLUB" userName={userName} userEmail={userEmail}>
       <div className="space-y-6">
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-border">
@@ -121,7 +139,33 @@ export default function ClubDashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {events.map((ev) => (
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted font-mono text-xs">
+                    <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-signal-orange" />
+                    Loading event requests from database...
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {error && !loading && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-6 text-red-600 font-mono text-xs">
+                    <AlertCircle className="w-4 h-4 inline mr-1.5" />
+                    {error}
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {!loading && !error && events.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted font-sans text-xs">
+                    No event requests found. Click &quot;Create Event Request&quot; above to submit your first request.
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {!loading && !error && events.map((ev) => (
                 <TableRow key={ev.id}>
                   <TableCell className="font-mono text-xs text-muted">
                     EV-{ev.id.toString().padStart(4, "0")}

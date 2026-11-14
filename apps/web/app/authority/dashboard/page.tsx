@@ -13,62 +13,73 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/Table";
-import { Clock, CheckCircle2, AlertCircle, ArrowUpRight, Calendar, Building } from "lucide-react";
+import { Clock, CheckCircle2, AlertCircle, ArrowUpRight, Calendar, Building, Loader2 } from "lucide-react";
+import { thekedarApi } from "@/lib/api";
+import { useSession } from "@/lib/auth-client";
 
 export default function AuthorityDashboardPage() {
-  const [pendingRequests, setPendingRequests] = React.useState([
-    {
-      id: 102,
-      event_id: 1,
-      event_title: "Annual Tech Symposium & Flagship Hackathon",
-      organizer_name: "Aarav Patel (ACM Lead)",
-      organizer_email: "acm.lead@college.edu",
-      resource_name: "Dr. APJ Abdul Kalam Main Auditorium",
-      resource_code: "AUDI_MAIN",
-      requested_time: "2026-11-05 10:30 to 18:00 UTC",
-      version: 2,
-      status: "PENDING",
-      submitted_at: "10 mins ago",
-    },
-    {
-      id: 104,
-      event_id: 4,
-      event_title: "Freshers Cultural Welcome Night",
-      organizer_name: "Music & Cultural Club",
-      organizer_email: "music.club@college.edu",
-      resource_name: "Mini Auditorium",
-      resource_code: "AUDI_MINI",
-      requested_time: "2026-11-12 17:00 to 21:00 UTC",
-      version: 1,
-      status: "PENDING",
-      submitted_at: "2 hours ago",
-    },
-  ]);
+  const { data: sessionData } = useSession();
+  const [pendingRequests, setPendingRequests] = React.useState<any[]>([]);
+  const [recentDecisions, setRecentDecisions] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const [recentDecisions, setRecentDecisions] = React.useState([
-    {
-      id: 98,
-      event_title: "National Cyber Security Conference",
-      decision: "APPROVED",
-      decided_by: "Prof. Rajesh Sharma (SW)",
-      resource: "Dr. APJ Abdul Kalam Main Auditorium",
-      date: "2026-10-26",
-    },
-    {
-      id: 95,
-      event_title: "Inter-College Debate Finals",
-      decision: "APPROVED",
-      decided_by: "Prof. Rajesh Sharma (SW)",
-      resource: "Mini Auditorium",
-      date: "2026-10-25",
-    },
-  ]);
+  React.useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      thekedarApi.getPendingDepartmentRequests(),
+      thekedarApi.getAuthorityDecisions().catch(() => []),
+    ])
+      .then(([pendingData, decisionsData]) => {
+        if (isMounted) {
+          const formatted = (pendingData || []).map((req: any) => {
+            const firstItem = req.requested_items && req.requested_items[0];
+            const timeStr = firstItem
+              ? `${firstItem.start_time?.slice(0, 16).replace("T", " ")} to ${firstItem.end_time?.slice(11, 16)}`
+              : "As requested in schedule";
+            const venueName = firstItem?.resource_name || "Department Venue";
+            const venueCode = firstItem?.resource_code || "VENUE";
+            return {
+              id: req.id,
+              event_id: req.event_id,
+              event_title: req.event_title || `Event #${req.event_id}`,
+              organizer_name: req.organizer_name || "Club Representative",
+              organizer_email: req.organizer_email || "club@college.edu",
+              resource_name: venueName,
+              resource_code: venueCode,
+              requested_time: timeStr,
+              version: req.current_version || 1,
+              status: req.status || "PENDING",
+              submitted_at: req.created_at ? req.created_at.slice(0, 10) : "Recent",
+            };
+          });
+          setPendingRequests(formatted);
+          setRecentDecisions(decisionsData || []);
+          setError(null);
+        }
+      })
+      .catch((err: any) => {
+        if (isMounted) {
+          setError(err?.message || "Failed to load authorization queue from server.");
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const userName = sessionData?.user?.full_name || "Department Authority";
+  const userEmail = sessionData?.user?.email || "authority@college.edu";
 
   return (
     <AppShell
       userRole="AUTHORITY"
-      userName="Prof. Rajesh Sharma"
-      userEmail="dean.sw@college.edu"
+      userName={userName}
+      userEmail={userEmail}
     >
       <div className="space-y-6">
         {/* Header */}
@@ -77,7 +88,7 @@ export default function AuthorityDashboardPage() {
             <div className="flex items-center space-x-2">
               <Building className="w-5 h-5 text-signal-orange" />
               <h1 className="text-xl md:text-2xl font-semibold text-ink tracking-tight font-sans">
-                Dean of Student Welfare Console
+                {sessionData?.user?.department_id === 1 ? "Dean of Academic Affairs Console" : "Department Authority Console"}
               </h1>
             </div>
             <p className="text-xs text-muted font-mono mt-0.5">
@@ -102,13 +113,15 @@ export default function AuthorityDashboardPage() {
             <div className="text-[11px] text-muted mt-1 font-sans">Awaiting your approval or correction</div>
           </div>
           <div className="bg-white border border-border p-4 rounded-[3px]">
-            <div className="text-xs text-ink font-mono uppercase">Managed Facilities</div>
-            <div className="text-2xl font-semibold text-ink mt-1 font-mono">2 Venues</div>
-            <div className="text-[11px] text-muted mt-1 font-sans">AUDI_MAIN (800), AUDI_MINI (250)</div>
+            <div className="text-xs text-ink font-mono uppercase">Decisions Recorded</div>
+            <div className="text-2xl font-semibold text-ink mt-1 font-mono">{recentDecisions.length} Decisions</div>
+            <div className="text-[11px] text-muted mt-1 font-sans">Institutional approval log</div>
           </div>
           <div className="bg-white border border-border p-4 rounded-[3px]">
             <div className="text-xs text-status-success font-mono uppercase">Signed Letters Issued</div>
-            <div className="text-2xl font-semibold text-status-success mt-1 font-mono">14 Active</div>
+            <div className="text-2xl font-semibold text-status-success mt-1 font-mono">
+              {recentDecisions.filter((d) => d.decision === "APPROVED").length} Active
+            </div>
             <div className="text-[11px] text-muted mt-1 font-sans">Verified on Sepolia testnet</div>
           </div>
         </div>
@@ -134,7 +147,33 @@ export default function AuthorityDashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pendingRequests.map((req) => (
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted font-mono text-xs">
+                    <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-signal-orange" />
+                    Loading authorization queue from database...
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {error && !loading && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-6 text-red-600 font-mono text-xs">
+                    <AlertCircle className="w-4 h-4 inline mr-1.5" />
+                    {error}
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {!loading && !error && pendingRequests.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted font-sans text-xs">
+                    No pending facility requests in your department authorization queue.
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {!loading && !error && pendingRequests.map((req) => (
                 <TableRow key={req.id}>
                   <TableCell className="font-mono text-xs text-muted">
                     REQ-{req.id}
@@ -176,9 +215,14 @@ export default function AuthorityDashboardPage() {
 
         {/* Recent Decisions History Table */}
         <div className="space-y-3 pt-4">
-          <h2 className="text-sm font-semibold text-ink font-mono uppercase tracking-wider">
-            Recent Institutional Decisions
-          </h2>
+          <div className="flex justify-between items-center">
+            <h2 className="text-sm font-semibold text-ink font-mono uppercase tracking-wider">
+              Recent Institutional Decisions
+            </h2>
+            <Link href="/authority/history" className="text-xs font-mono text-signal-orange hover:underline">
+              View All History &rarr;
+            </Link>
+          </div>
 
           <Table>
             <TableHeader>
@@ -189,9 +233,17 @@ export default function AuthorityDashboardPage() {
                 <TableHead>Decided By</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Decision</TableHead>
+                <TableHead className="text-right">Letter</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
+              {recentDecisions.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-6 text-muted font-sans text-xs">
+                    No decisions recorded yet.
+                  </TableCell>
+                </TableRow>
+              )}
               {recentDecisions.map((dec) => (
                 <TableRow key={dec.id}>
                   <TableCell className="font-mono text-xs text-muted">DEC-{dec.id}</TableCell>
@@ -201,6 +253,20 @@ export default function AuthorityDashboardPage() {
                   <TableCell className="text-xs text-muted font-mono">{dec.date}</TableCell>
                   <TableCell>
                     <StatusBadge status={dec.decision} />
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs">
+                    {dec.permission_letter_id ? (
+                      <a
+                        href={`http://localhost:8000/api/v1/documents/${dec.permission_letter_id}/download`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-signal-orange hover:underline font-semibold"
+                      >
+                        PDF
+                      </a>
+                    ) : (
+                      <span className="text-muted">-</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

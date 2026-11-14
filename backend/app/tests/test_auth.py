@@ -1,42 +1,33 @@
 """Authentication & Authorization Test Suite"""
 
 import pytest
-import httpx
-from jose import jwt
-
-from backend.app.main import app
-from backend.app.core.config import settings
-from backend.app.database.session import get_db
+from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
+from backend.app.main import health_check
+from backend.app.auth.security import create_access_token
+from backend.app.auth.jwt import get_current_user
 from backend.app.database.models import User, UserRole
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.mark.asyncio
-async def test_health_check():
+def test_health_check():
     """Verify system health check endpoint."""
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/health")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "healthy"
-        assert data["service"] == "THEKEDAR"
+    data = health_check()
+    assert data["status"] == "healthy"
+    assert data["service"] == "THEKEDAR"
 
 
-@pytest.mark.asyncio
-async def test_auth_me_unauthorized():
-    """Verify endpoint rejects requests with no credentials."""
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/v1/auth/me")
-        assert response.status_code == 401
-        assert "Authorization token required" in response.json()["detail"]
+def test_auth_me_unauthorized():
+    """Verify get_current_user rejects requests with no credentials."""
+    class MockSession:
+        pass
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user(credentials=None, db=MockSession())
+    assert exc_info.value.status_code == 401
+    assert "Authorization token required" in str(exc_info.value.detail)
 
 
-@pytest.mark.asyncio
-async def test_auth_me_with_mocked_user():
+def test_auth_me_with_mocked_user():
     """Verify authenticated user profile retrieval with valid token."""
     mock_user = User(
         id=1,
@@ -46,25 +37,18 @@ async def test_auth_me_with_mocked_user():
         is_active=True,
     )
 
-    payload = {"sub": mock_user.email, "email": mock_user.email}
-    token = jwt.encode(payload, settings.BETTER_AUTH_SECRET, algorithm="HS256")
+    token = create_access_token(
+        data={"sub": mock_user.email, "email": mock_user.email, "role": mock_user.role.value}
+    )
 
     class MockSession:
         def scalar(self, stmt):
             return mock_user
 
-    app.dependency_overrides[get_db] = lambda: MockSession()
+    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+    resolved_user = get_current_user(credentials=creds, db=MockSession())
+    assert resolved_user.email == mock_user.email
+    assert resolved_user.role == UserRole.STUDENT_CLUB
+    assert resolved_user.full_name == mock_user.full_name
 
-    try:
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.get(
-                "/api/v1/auth/me",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            assert response.status_code == 200
-            data = response.json()
-            assert data["email"] == mock_user.email
-            assert data["role"] == "STUDENT_CLUB"
-            assert data["full_name"] == mock_user.full_name
-    finally:
-        app.dependency_overrides.clear()
+

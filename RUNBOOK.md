@@ -1,17 +1,18 @@
-# THEKEDAR: Production Operations & Deployment Runbook
+# THEKEDAR: Local-First Operations & Runbook
 
 **Institutional Resource Booking and Permission Management System**  
-*Release Version 1.0.0 Production Standard*
+*Release Version 1.0.0 — Local-First Windows Architecture*
 
 ---
 
 ## 1. System Overview
 
-THEKEDAR is an institutional control system designed for college campuses to eliminate paper-based facility approvals, prevent double bookings through row-level database locking, issue tamper-evident RSA-PSS signed digital permission letters, and register cryptographic audit proofs to the Ethereum Sepolia testnet.
+THEKEDAR is an institutional control system designed for college campuses to eliminate paper-based facility approvals, prevent double bookings through transactional database locking, issue tamper-evident RSA-PSS signed digital permission letters, and register cryptographic audit proofs to the Ethereum Sepolia testnet.
 
 ### Core Architectural Separation
-1. **Primary Authority**: The relational PostgreSQL database (`events`, `department_requests`, `permission_letters`) holds canonical authorization state.
-2. **Notary Proof**: The Ethereum Sepolia smart contract (`DocumentRegistry.sol`) holds immutable, timestamped SHA-256 document digests. A database approval is immediate; blockchain confirmation completes asynchronously.
+1. **Primary Authority**: The local relational SQLite database (`backend/data/thekedar.db`) holds canonical authorization state (`events`, `department_requests`, `bookings`, `permission_letters`, `audit_logs`).
+2. **Notary Proof**: The Ethereum Sepolia smart contract (`DocumentRegistry.sol`) holds immutable, timestamped SHA-256 document digests. A database approval is immediate; blockchain confirmation completes via Web3.py.
+3. **Local Authentication**: FastAPI-managed authentication issuing signed, expiring HS256 JWT access tokens with PBKDF2 password hashing. No external Neon or Better Auth dependencies required.
 
 ---
 
@@ -19,113 +20,139 @@ THEKEDAR is an institutional control system designed for college campuses to eli
 
 | Tier | Technology | Purpose |
 | :--- | :--- | :--- |
-| **Frontend** | Next.js 14 (App Router), Tailwind CSS, Lucide | Club portal, Authority approval queue, Public verification tool, Admin console |
-| **Backend API** | FastAPI, Python 3.12, Pydantic v2 | Concurrency booking engine, multi-department workflow, PDF generation |
-| **Database** | Neon PostgreSQL, SQLAlchemy 2.0, Alembic | Relational state with pessimistic row locks (`with_for_update`) |
+| **Frontend** | Next.js 14 (App Router), Tailwind CSS, Lucide | Club portal, Authority approval queue, Public verification tool, Admin console (`http://localhost:3000`) |
+| **Backend API** | FastAPI, Python 3.12, Pydantic v2 | Concurrency booking engine, multi-department workflow, PDF generation, local JWT auth (`http://127.0.0.1:8000`) |
+| **Database** | SQLite, SQLAlchemy 2.0, Alembic | Local relational state (`backend/data/thekedar.db`) with `PRAGMA foreign_keys=ON` |
 | **Document Engine** | ReportLab, Cryptography (RSA-PSS 2048) | Deterministic PDF generation and asymmetric digital signing |
-| **Blockchain** | Solidity 0.8.24, Hardhat, Web3.py | Sepolia `DocumentRegistry` smart contract and on-chain hash verification |
-| **Authentication** | Better Auth, RS256 JWKS bridge | Unified token verification across Next.js and FastAPI |
+| **Blockchain** | Solidity 0.8.24, Hardhat, Web3.py | Sepolia `DocumentRegistry` smart contract (Chain ID: `11155111`) |
+| **Authentication** | FastAPI Local Auth, PBKDF2-HMAC-SHA256, HS256 JWT | Local auth client in Next.js communicating directly with FastAPI |
 
 ---
 
 ## 3. Environment Variables Reference
 
-### Backend (`backend/.env` or Render Web Service)
+### Backend (`backend/.env`)
 
 ```env
 # Application Environment
-ENVIRONMENT=production
+ENVIRONMENT=development
 PROJECT_NAME="THEKEDAR"
 VERSION="1.0.0"
 
 # Networking & CORS
-API_BASE_URL=https://api.thekedar.campus.edu
-NEXT_PUBLIC_APP_URL=https://thekedar.campus.edu
-CORS_ALLOWED_ORIGINS=["https://thekedar.campus.edu"]
+API_BASE_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+CORS_ALLOWED_ORIGINS=["http://localhost:3000", "http://127.0.0.1:3000"]
 
-# Database (Neon PostgreSQL Pooled Connection)
-DATABASE_URL=postgresql+psycopg2://<user>:<password>@<neon-pooler-host>/thekedar?sslmode=require
+# Database (Local SQLite)
+DATABASE_URL=sqlite:///backend/data/thekedar.db
 
-# Better Auth & JWT Bridge
-BETTER_AUTH_SECRET=<minimum-32-characters-secret>
-BETTER_AUTH_JWKS_URL=https://thekedar.campus.edu/api/auth/jwks
-JWT_ALGORITHM=RS256
+# FastAPI-Managed Local Authentication
+JWT_SECRET_KEY=local-dev-jwt-signing-secret-key-32-chars-minimum
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
 
 # Ethereum Sepolia Blockchain
-SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/<api-key>
+SEPOLIA_RPC_URL=https://rpc.sepolia.org
 BLOCKCHAIN_CHAIN_ID=11155111
-DOCUMENT_REGISTRY_ADDRESS=0x<deployed-contract-address>
-SIGNER_PRIVATE_KEY=<authority-funded-private-key-without-0x>
+DOCUMENT_REGISTRY_ADDRESS=0x5FbDB2315678afecb367f032d93F642f64180aa3
+SIGNER_PRIVATE_KEY=
 
 # Document Storage
 STORAGE_DIR=storage/documents
 ```
 
-### Frontend (`apps/web/.env.production` or Vercel)
+### Frontend (`apps/web/.env.local` or `.env`)
 
 ```env
-NEXT_PUBLIC_APP_URL=https://thekedar.campus.edu
-NEXT_PUBLIC_API_URL=https://api.thekedar.campus.edu
-BETTER_AUTH_SECRET=<matches-backend-secret>
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
 
 ---
 
-## 4. Database Setup & Migrations
+## 4. Local Database Setup & Initialization
 
-### 1. Run Alembic Migrations
-To upgrade the schema to latest version:
-```bash
-python backend/scripts/run_migrations.py
-# Or directly via alembic:
-cd backend && alembic upgrade head
-```
-
-### 2. Seed Master Production Data
-Initializes departments, standard venues/labs, and the root institutional administrator:
-```bash
-python backend/app/database/seed_production.py
-```
-
----
-
-## 5. Smart Contract Deployment to Sepolia
-
-### 1. Compile Contracts
-```bash
-npm run compile:contracts
-```
-
-### 2. Execute Deployment Script
-Ensure deployer wallet has Sepolia testnet ETH:
-```bash
-npx hardhat run contracts/scripts/deploy.ts --network sepolia
-```
-The script automatically exports the deployed address and ABI to:
-- `backend/app/blockchain/artifacts/DocumentRegistry.json`
-- `apps/web/lib/contracts/DocumentRegistry.json`
-
-### 3. Verify Contract on Etherscan
-```bash
-npx hardhat verify --network sepolia <DEPLOYED_CONTRACT_ADDRESS>
-```
-
----
-
-## 6. Local Development & Service Execution
-
-### Run Backend
-```bash
+### Step 1: Run Alembic Migrations
+Initializes the SQLite schema in `backend/data/thekedar.db`:
+```powershell
 $env:PYTHONPATH="."
-backend\.venv\Scripts\uvicorn backend.app.main:app --reload --port 8000
+.venv\Scripts\alembic -c backend\alembic.ini upgrade head
 ```
-API Documentation available at: `http://localhost:8000/docs`
 
-### Run Frontend
-```bash
-npm run dev:web
+### Step 2: Seed Local Reference Data
+Seeds demo departments, venues, resources, and demo accounts:
+```powershell
+$env:PYTHONPATH="."
+.venv\Scripts\python -m backend.app.database.seed
 ```
-Access portal at: `http://localhost:3000`
+*Note: Seeding is idempotent and safe to re-run. The root administrator account is created with `password_hash=None` so it cannot be accessed via a default hardcoded password.*
+
+### Step 3: Database Reset Procedure (If Needed)
+To reset the local database from scratch:
+```powershell
+Remove-Item -Force backend\data\thekedar.db
+$env:PYTHONPATH="."
+.venv\Scripts\alembic -c backend\alembic.ini upgrade head
+.venv\Scripts\python -m backend.app.database.seed
+```
+
+---
+
+## 5. Starting the Local Application
+
+Open two separate Windows PowerShell windows at the repository root `d:\SHUBHAM\VIT_ACADEMICS\TY\BLOCKCHAIN\CP`:
+
+### Terminal 1 — Backend (FastAPI)
+```powershell
+$env:PYTHONPATH="."
+.venv\Scripts\uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+- API Base URL: `http://127.0.0.1:8000`
+- Interactive OpenAPI Docs: `http://127.0.0.1:8000/docs`
+- Health check: `http://127.0.0.1:8000/health`
+
+### Terminal 2 — Frontend (Next.js)
+```powershell
+npm run dev --workspace=apps/web
+```
+- Web Application: `http://localhost:3000`
+- Club Dashboard: `http://localhost:3000/club/dashboard`
+- Authority Queue: `http://localhost:3000/authority/dashboard`
+- Document Verification: `http://localhost:3000/verify`
+
+---
+
+## 6. Running Local Test Suites
+
+All backend tests can be run using pytest in PowerShell:
+```powershell
+$env:PYTHONPATH="."
+.venv\Scripts\python -m pytest backend/app/tests/
+```
+
+To run individual focused suites:
+```powershell
+# E2E Complete Workflow
+.venv\Scripts\python -m pytest backend/app/tests/test_e2e_local.py
+
+# Local Authentication & RBAC
+.venv\Scripts\python -m pytest backend/app/tests/test_local_auth.py
+
+# Blockchain Service & Transaction Handling
+.venv\Scripts\python -m pytest backend/app/tests/test_blockchain.py
+
+# Double-Booking Concurrency & Row Locking
+.venv\Scripts\python -m pytest backend/app/tests/test_concurrency.py
+
+# PDF Letter Generation & Tamper Detection
+.venv\Scripts\python -m pytest backend/app/tests/test_documents.py
+```
+
+Frontend TypeScript type checking:
+```powershell
+npx tsc --noEmit --project apps/web/tsconfig.json
+```
 
 ---
 
@@ -140,7 +167,7 @@ Any institutional permission letter can be verified offline or online using the 
 1. RSA-PSS Digital Signature Check  ──► Validated via 2048-bit institutional public key
         │
         ▼
-2. SHA-256 Database Hash Match      ──► Checked against PostgreSQL permission_letters table
+2. SHA-256 Database Hash Match      ──► Checked against SQLite permission_letters table
         │
         ▼
 3. Authority Approval Status        ──► Validates status == 'VALID'
@@ -154,14 +181,14 @@ Any institutional permission letter can be verified offline or online using the 
 
 ---
 
-## 8. Launch Checklist Verification (DESIGN.md Sections 11 & 12)
+## 8. Verification & Acceptance Checklist
 
-- [x] **Zero Fabricated Metrics**: No placeholder charts, fake user counters, or unproven testimonials.
-- [x] **Design Tokens**: Standardized Graphite `#171717`, Paper `#F5F5F2`, Border `#D9D9D4`, Signal Orange `#E86A36`, Geist typography.
-- [x] **Conflict Prevention**: Deterministic row-level locking (`with_for_update()`) verified under race-condition tests.
-- [x] **Multi-Department Decomposition**: Independent department requests and status aggregation verified.
-- [x] **Digital Signatures**: 2048-bit RSA-PSS signing; 1-byte alteration detected and rejected.
-- [x] **Public Verification Tool**: Accessible without login at `/verify`.
-- [x] **Compliance Pages**: Published `/privacy` and `/terms` with institutional policies.
-- [x] **Favicon & Clean Metadata**: Configured with custom SVG mark and OpenGraph metadata.
-- [x] **WCAG 2.2 AA Compliance**: Semantic HTML, high-contrast palette, accessible forms and drawer navigation.
+- [x] **Local SQLite Foundation**: Database at `backend/data/thekedar.db`, foreign keys enforced.
+- [x] **FastAPI-Managed Auth**: Registration, login, JWT token issuance, PBKDF2 hashing, role enforcement.
+- [x] **Zero Better Auth/Neon Dependency**: Removed remote JWKS network calls and Neon PostgreSQL dependencies.
+- [x] **Real Frontend Integration**: Dashboards connected to backend APIs via `apps/web/lib/api.ts`.
+- [x] **Conflict Prevention**: Double-booking conflict detection verified under test conditions.
+- [x] **Digital Signatures & Tamper Detection**: RSA-PSS 2048-bit signing and 1-byte alteration rejection verified.
+- [x] **Sepolia Blockchain Service**: Raw transaction dispatch with clear `FAILED`/`PENDING` reporting; zero fake transaction hashes.
+- [x] **Regression Tests**: All 25 backend tests passing; TypeScript compiles with 0 errors.
+

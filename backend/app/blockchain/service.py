@@ -104,10 +104,15 @@ class BlockchainService:
                 record_status = BlockchainTxStatus.FAILED
                 err_msg = str(e)
         else:
-            # Prototype / Simulation mode (when running offline or without Sepolia private key)
-            logger.info("Operating in simulation mode for document %s", doc_id)
-            tx_hash_str = f"0xsimulated_{doc_hash_hex[:32]}"
-            record_status = BlockchainTxStatus.CONFIRMED
+            record_status = BlockchainTxStatus.FAILED
+            tx_hash_str = None
+            if not settings.SIGNER_PRIVATE_KEY:
+                err_msg = "Blockchain transaction not submitted: SIGNER_PRIVATE_KEY is not configured"
+            elif not self.contract:
+                err_msg = "Blockchain transaction not submitted: DocumentRegistry contract is not loaded"
+            else:
+                err_msg = "Blockchain transaction not submitted: Unable to connect to Ethereum Sepolia RPC"
+            logger.warning("Blockchain registration: %s", err_msg)
 
         record = BlockchainRecord(
             permission_letter_id=permission_letter_id,
@@ -115,7 +120,7 @@ class BlockchainService:
             contract_address=self.contract_address,
             status=record_status,
             error_message=err_msg,
-            confirmed_at=datetime.now(timezone.utc) if record_status == BlockchainTxStatus.CONFIRMED else None,
+            confirmed_at=None,
         )
         db.add(record)
         db.flush()
@@ -132,10 +137,13 @@ class BlockchainService:
         record = db.scalar(
             select(BlockchainRecord).where(BlockchainRecord.id == record_id)
         )
-        if not record or not record.tx_hash:
-            raise ValueError(f"BlockchainRecord {record_id} not found or missing tx_hash")
+        if not record:
+            raise ValueError(f"BlockchainRecord {record_id} not found")
 
-        if record.status == BlockchainTxStatus.CONFIRMED or record.tx_hash.startswith("0xsimulated"):
+        if not record.tx_hash:
+            return record
+
+        if record.status == BlockchainTxStatus.CONFIRMED:
             return record
 
         try:

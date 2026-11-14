@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { ArrowLeft, ArrowRight, Check, CheckCircle, AlertTriangle, Building, Calendar, Clock, Trash2 } from "lucide-react";
+import { thekedarApi } from "@/lib/api";
+import { useSession } from "@/lib/auth-client";
 
 interface ResourceOption {
   id: number;
@@ -78,9 +80,22 @@ const AVAILABLE_RESOURCES: ResourceOption[] = [
   },
 ];
 
+function formatToISO(dateStr: string, timeStr: string): string {
+  const d = dateStr.trim();
+  const parts = timeStr.trim().split(":");
+  const hh = (parts[0] || "09").padStart(2, "0");
+  const mm = (parts[1] || "00").padStart(2, "0");
+  const ss = (parts[2] || "00").padStart(2, "0");
+  return `${d}T${hh}:${mm}:${ss}Z`;
+}
+
 export default function CreateEventPage() {
   const router = useRouter();
+  const { data: sessionData } = useSession();
   const [step, setStep] = React.useState<1 | 2 | 3>(1);
+
+  // Dynamic resources from API
+  const [resources, setResources] = React.useState<ResourceOption[]>(AVAILABLE_RESOURCES);
 
   // Step 1: Event Details
   const [title, setTitle] = React.useState("");
@@ -99,17 +114,62 @@ export default function CreateEventPage() {
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const handleAddResource = () => {
-    const res = AVAILABLE_RESOURCES.find((r) => r.id === activeResourceId);
+  React.useEffect(() => {
+    thekedarApi
+      .getResources()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped: ResourceOption[] = data.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            code: r.code,
+            department_name: r.department?.name || `Department #${r.department_id}`,
+            department_id: r.department_id,
+            capacity: r.capacity || 50,
+            location: r.location || "Campus Venue",
+          }));
+          setResources(mapped);
+          if (mapped[0]) {
+            setActiveResourceId(mapped[0].id);
+          }
+        }
+      })
+      .catch(() => {
+        // Fall back to default static resources
+      });
+  }, []);
+
+  const handleAddResource = async () => {
+    const res = resources.find((r) => r.id === activeResourceId);
     if (!res) return;
 
-    const startISO = `${slotDate}T${startTime}:00Z`;
-    const endISO = `${slotDate}T${endTime}:00Z`;
+    if (!slotDate) {
+      setAvailabilityMessage("Please pick a date for the resource booking.");
+      return;
+    }
+
+    if (startTime >= endTime) {
+      setAvailabilityMessage("Start time must be strictly earlier than end time.");
+      return;
+    }
+
+    const startISO = formatToISO(slotDate, startTime);
+    const endISO = formatToISO(slotDate, endTime);
 
     // Check duplicate
     if (selectedResources.some((r) => r.resource_id === res.id && r.start_time === startISO)) {
       setAvailabilityMessage("This resource is already added for this start time.");
       return;
+    }
+
+    try {
+      const avail = await thekedarApi.checkAvailability(res.id, startISO, endISO);
+      if (avail && avail.available === false) {
+        setAvailabilityMessage(`Facility '${res.name}' is already reserved or unavailable for this time window.`);
+        return;
+      }
+    } catch {
+      // Continue if check endpoint is not accessible
     }
 
     setSelectedResources([
@@ -134,15 +194,35 @@ export default function CreateEventPage() {
 
   const handleSubmitEvent = async () => {
     setError(null);
+    if (!title.trim()) {
+      setError("Please provide an event title.");
+      return;
+    }
+    if (selectedResources.length === 0) {
+      setError("Please select at least one facility resource.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      // In development / demo mode, redirect to mock created event
-      setTimeout(() => {
-        router.push("/club/events/1");
-      }, 700);
+      const payload = {
+        title: title.trim(),
+        description: description.trim() || undefined,
+        expected_attendance: expectedAttendance,
+        requested_resources: selectedResources.map((r) => ({
+          resource_id: r.resource_id,
+          start_time: r.start_time,
+          end_time: r.end_time,
+        })),
+      };
+
+      const created = await thekedarApi.createEvent(payload);
+      router.push(`/club/events/${created.id}`);
     } catch (err: any) {
-      setError(err?.message || "Failed to submit event request.");
+      const rawMsg = err?.message || err?.detail || "Failed to submit event request.";
+      const msg = typeof rawMsg === "string" ? rawMsg : JSON.stringify(rawMsg);
+      setError(msg);
       setSubmitting(false);
     }
   };
@@ -156,8 +236,11 @@ export default function CreateEventPage() {
     return acc;
   }, {} as Record<string, SelectedResourceItem[]>);
 
+  const userName = sessionData?.user?.full_name || "Club Representative";
+  const userEmail = sessionData?.user?.email || "club@college.edu";
+
   return (
-    <AppShell userRole="STUDENT_CLUB" userName="ACM Chapter Lead" userEmail="acm.lead@college.edu">
+    <AppShell userRole="STUDENT_CLUB" userName={userName} userEmail={userEmail}>
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Breadcrumb & Navigation */}
         <div className="flex items-center space-x-2 text-xs font-mono text-muted">
@@ -284,7 +367,7 @@ export default function CreateEventPage() {
                     value={activeResourceId}
                     onChange={(e) => setActiveResourceId(Number(e.target.value))}
                   >
-                    {AVAILABLE_RESOURCES.map((r) => (
+                    {resources.map((r) => (
                       <option key={r.id} value={r.id}>
                         {r.name} ({r.code}) — {r.department_name} [Cap: {r.capacity}]
                       </option>
@@ -375,6 +458,12 @@ export default function CreateEventPage() {
               )}
             </div>
 
+            {error && (
+              <div className="p-3 bg-status-error/10 border border-status-error/30 text-status-error text-xs font-mono">
+                {error}
+              </div>
+            )}
+
             <div className="pt-4 border-t border-border flex justify-between">
               <Button variant="outline" onClick={() => setStep(1)}>
                 <ArrowLeft className="w-4 h-4 mr-1.5" />
@@ -436,6 +525,12 @@ export default function CreateEventPage() {
                 </div>
               ))}
             </div>
+
+            {error && (
+              <div className="p-3 bg-status-error/10 border border-status-error/30 text-status-error text-xs font-mono">
+                {error}
+              </div>
+            )}
 
             <div className="pt-4 border-t border-border flex justify-between">
               <Button variant="outline" onClick={() => setStep(2)}>

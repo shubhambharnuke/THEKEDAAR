@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 from backend.app.database.models.event import EventStatus, DepartmentRequestStatus
 
@@ -17,9 +17,32 @@ class EventCreateRequest(BaseModel):
     title: str = Field(..., min_length=3, max_length=255, description="Event Title")
     description: Optional[str] = Field(None, description="Detailed Event Description")
     expected_attendance: int = Field(default=0, ge=0, description="Expected attendee count")
-    requested_resources: List[ResourceBookingItem] = Field(
-        ..., min_length=1, description="List of required resources and time slots"
+    requested_resources: Optional[List[ResourceBookingItem]] = Field(
+        default=None, description="List of required resources and time slots"
     )
+    resource_bookings: Optional[List[ResourceBookingItem]] = Field(
+        default=None, description="Alias for requested_resources"
+    )
+
+    @model_validator(mode="after")
+    def populate_resources(self):
+        if not self.requested_resources and not self.resource_bookings:
+            raise ValueError("At least one resource booking is required.")
+        if not self.requested_resources and self.resource_bookings:
+            self.requested_resources = self.resource_bookings
+        return self
+
+
+
+class DecisionHistoryItemRead(BaseModel):
+    id: int
+    version_number: int
+    action: str
+    remarks: Optional[str] = None
+    reviewer_name: Optional[str] = None
+    timestamp: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DepartmentRequestRead(BaseModel):
@@ -28,10 +51,15 @@ class DepartmentRequestRead(BaseModel):
     department_id: int
     department_name: Optional[str] = None
     department_code: Optional[str] = None
+    event_title: Optional[str] = None
+    organizer_name: Optional[str] = None
+    organizer_email: Optional[str] = None
     current_version: int
     status: DepartmentRequestStatus
     remarks: Optional[str] = None
     requested_items: List[Dict[str, Any]] = []
+    permission_letter_id: Optional[str] = None
+    decisions: List[DecisionHistoryItemRead] = []
     created_at: datetime
     updated_at: Optional[datetime] = None
 

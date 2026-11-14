@@ -6,7 +6,11 @@ from backend.app.resources.router import router as resources_router
 from backend.app.bookings.router import router as bookings_router
 from backend.app.approvals.router import router as approvals_router
 from backend.app.documents.router import router as documents_router
-from backend.app.blockchain.router import router as blockchain_router
+# Optional blockchain router – may fail on systems without required native libs
+try:
+    from backend.app.blockchain.router import router as blockchain_router
+except Exception:
+    blockchain_router = None  # type: ignore
 from backend.app.audit.router import router as audit_router
 from backend.app.admin.router import router as admin_router
 
@@ -18,6 +22,8 @@ api_router.include_router(resources_router)
 api_router.include_router(bookings_router)
 api_router.include_router(approvals_router)
 api_router.include_router(documents_router)
-api_router.include_router(blockchain_router)
+# Include blockchain routes only if the router was successfully imported
+if blockchain_router:
+    api_router.include_router(blockchain_router)
 api_router.include_router(audit_router)
 api_router.include_router(admin_router)

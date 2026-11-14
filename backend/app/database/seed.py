@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from backend.app.database.session import SessionLocal, engine, Base
+from backend.app.auth.security import get_password_hash
 from backend.app.database.models import (
     Department,
     Resource,
@@ -106,37 +107,44 @@ def seed_database(db: Session) -> None:
         else:
             print(f"  = Existing Resource: {res.name} ({res.code})")
 
-    # 3. Users
+    # 3. Users (Safe reference and dev testing accounts; admin has NO hardcoded password)
+    dev_password_hash = get_password_hash("ThekedarDev2026!")
+
     users_data = [
         {
             "email": "admin@college.edu",
             "full_name": "System Administrator",
             "role": UserRole.ADMIN,
             "department_id": None,
+            "password_hash": None,  # No publicly known hardcoded password for admin
         },
         {
             "email": "dean.acad@college.edu",
             "full_name": "Dr. Sarah Jenkins (Dean Academics)",
             "role": UserRole.AUTHORITY,
             "department_id": dept_map["DEAN_ACAD"].id,
+            "password_hash": dev_password_hash,
         },
         {
             "email": "dean.sw@college.edu",
             "full_name": "Prof. Rajesh Sharma (Dean Student Welfare)",
             "role": UserRole.AUTHORITY,
             "department_id": dept_map["STUDENT_WELFARE"].id,
+            "password_hash": dev_password_hash,
         },
         {
             "email": "acm.lead@college.edu",
             "full_name": "Aarav Patel (ACM Chapter President)",
             "role": UserRole.STUDENT_CLUB,
             "department_id": None,
+            "password_hash": dev_password_hash,
         },
         {
             "email": "gate.security@college.edu",
             "full_name": "Main Gate Security Desk",
             "role": UserRole.VERIFIER,
             "department_id": None,
+            "password_hash": dev_password_hash,
         },
     ]
 

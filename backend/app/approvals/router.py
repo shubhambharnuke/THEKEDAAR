@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from pydantic import BaseModel, ConfigDict
 from backend.app.auth.jwt import get_current_user
 from backend.app.auth.rbac import require_role, check_department_authority
 from backend.app.database.session import get_db
@@ -21,10 +22,12 @@ from backend.app.database.models import (
     Event,
     ResourceBooking,
     BookingStatus,
+    PermissionLetter,
 )
 from backend.app.bookings.schemas import (
     DepartmentDecisionRequest,
     DepartmentRequestRead,
+    DecisionHistoryItemRead,
 )
 from backend.app.bookings.service import (
     confirm_resource_booking,
@@ -64,6 +67,130 @@ def get_pending_requests(
     requests = db.scalars(stmt).unique().all()
 
     return [_serialize_department_request(req, db) for req in requests]
+
+
+class AuthorityDecisionRecord(BaseModel):
+    id: int
+    department_request_id: int
+    version_number: int
+    event_id: int
+    event_title: str
+    decision: str
+    remarks: Optional[str] = None
+    decided_by: str
+    resource: str
+    date: str
+    timestamp: datetime
+    permission_letter_id: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@router.get("/decisions", response_model=List[AuthorityDecisionRecord])
+def get_authority_decision_history(
+    current_user: User = Depends(require_role(UserRole.AUTHORITY, UserRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve past institutional decisions made by or within the department authority's purview.
+    """
+    stmt = (
+        select(DecisionHistory)
+        .join(DepartmentRequest, DecisionHistory.department_request_id == DepartmentRequest.id)
+        .join(Event, DepartmentRequest.event_id == Event.id)
+        .options(
+            joinedload(DecisionHistory.department_request).joinedload(DepartmentRequest.event),
+            joinedload(DecisionHistory.department_request).joinedload(DepartmentRequest.department),
+            joinedload(DecisionHistory.reviewer),
+        )
+    )
+
+    if current_user.role == UserRole.AUTHORITY:
+        if not current_user.department_id:
+            return []
+        stmt = stmt.where(DepartmentRequest.department_id == current_user.department_id)
+
+    stmt = stmt.order_by(DecisionHistory.timestamp.desc())
+    decisions = db.scalars(stmt).unique().all()
+
+    results = []
+    for d in decisions:
+        dept_req = d.department_request
+        event = dept_req.event if dept_req else None
+
+        # Look up resource name from RequestVersion or booking
+        resource_desc = "Department Facility"
+        ver = db.scalar(
+            select(RequestVersion).where(
+                RequestVersion.department_request_id == dept_req.id,
+                RequestVersion.version_number == d.version_number,
+            )
+        )
+        if ver and ver.requested_payload_json:
+            try:
+                items = json.loads(ver.requested_payload_json)
+                if items and isinstance(items, list):
+                    names = [it.get("resource_name") for it in items if it.get("resource_name")]
+                    if names:
+                        resource_desc = ", ".join(names)
+            except Exception:
+                pass
+
+        # Look up associated permission letter if approved
+        letter = db.scalar(
+            select(PermissionLetter)
+            .where(
+                PermissionLetter.department_request_id == dept_req.id,
+                PermissionLetter.version_number == d.version_number,
+            )
+        )
+        letter_id = letter.id if letter else None
+
+        results.append(
+            AuthorityDecisionRecord(
+                id=d.id,
+                department_request_id=dept_req.id,
+                version_number=d.version_number,
+                event_id=event.id if event else 0,
+                event_title=event.title if event else f"Event #{dept_req.event_id}",
+                decision=d.action.value if hasattr(d.action, "value") else str(d.action),
+                remarks=d.remarks,
+                decided_by=d.reviewer.full_name if d.reviewer else "Department Authority",
+                resource=resource_desc,
+                date=d.timestamp.strftime("%Y-%m-%d") if d.timestamp else "",
+                timestamp=d.timestamp,
+                permission_letter_id=letter_id,
+            )
+        )
+
+    return results
+
+
+@router.get("/requests/{request_id}", response_model=DepartmentRequestRead)
+def get_department_request_detail(
+    request_id: int,
+    current_user: User = Depends(require_role(UserRole.AUTHORITY, UserRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Retrieve details of a single department request for review."""
+    dept_req = db.scalar(
+        select(DepartmentRequest)
+        .options(joinedload(DepartmentRequest.department), joinedload(DepartmentRequest.event))
+        .where(DepartmentRequest.id == request_id)
+    )
+    if not dept_req:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Department request ID {request_id} not found",
+        )
+
+    if not check_department_authority(dept_req.department_id, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"You do not have authority over department ID {dept_req.department_id}",
+        )
+
+    return _serialize_department_request(dept_req, db)
 
 
 @router.post("/requests/{request_id}/decision", response_model=DepartmentRequestRead)

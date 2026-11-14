@@ -19,30 +19,36 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # 1. Enums
-    user_role_enum = postgresql.ENUM('STUDENT_CLUB', 'AUTHORITY', 'VERIFIER', 'ADMIN', name='user_role_enum')
-    user_role_enum.create(op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    is_postgres = bind.dialect.name == "postgresql"
+    now_default = sa.text('now()') if is_postgres else sa.text('(CURRENT_TIMESTAMP)')
+    true_default = sa.text('true') if is_postgres else sa.text('1')
 
-    resource_type_enum = postgresql.ENUM('AUDITORIUM', 'LAB', 'CLASSROOM', 'SEMINAR_HALL', 'GROUND', 'OTHER', name='resource_type_enum')
-    resource_type_enum.create(op.get_bind(), checkfirst=True)
+    # 1. Enums (PostgreSQL dialect specific creation)
+    if is_postgres:
+        user_role_enum = postgresql.ENUM('STUDENT_CLUB', 'AUTHORITY', 'VERIFIER', 'ADMIN', name='user_role_enum')
+        user_role_enum.create(bind, checkfirst=True)
 
-    event_status_enum = postgresql.ENUM('DRAFT', 'PENDING', 'PARTIALLY_APPROVED', 'APPROVED', 'REJECTED', 'CANCELLED', name='event_status_enum')
-    event_status_enum.create(op.get_bind(), checkfirst=True)
+        resource_type_enum = postgresql.ENUM('AUDITORIUM', 'LAB', 'CLASSROOM', 'SEMINAR_HALL', 'GROUND', 'OTHER', name='resource_type_enum')
+        resource_type_enum.create(bind, checkfirst=True)
 
-    dept_request_status_enum = postgresql.ENUM('PENDING', 'CORRECTION_REQUESTED', 'APPROVED', 'REJECTED', 'CANCELLED', name='dept_request_status_enum')
-    dept_request_status_enum.create(op.get_bind(), checkfirst=True)
+        event_status_enum = postgresql.ENUM('DRAFT', 'PENDING', 'PARTIALLY_APPROVED', 'APPROVED', 'REJECTED', 'CANCELLED', name='event_status_enum')
+        event_status_enum.create(bind, checkfirst=True)
 
-    booking_status_enum = postgresql.ENUM('CONFIRMED', 'RELEASED', name='booking_status_enum')
-    booking_status_enum.create(op.get_bind(), checkfirst=True)
+        dept_request_status_enum = postgresql.ENUM('PENDING', 'CORRECTION_REQUESTED', 'APPROVED', 'REJECTED', 'CANCELLED', name='dept_request_status_enum')
+        dept_request_status_enum.create(bind, checkfirst=True)
 
-    decision_action_enum = postgresql.ENUM('APPROVED', 'REJECTED', 'CORRECTION_REQUESTED', name='decision_action_enum')
-    decision_action_enum.create(op.get_bind(), checkfirst=True)
+        booking_status_enum = postgresql.ENUM('CONFIRMED', 'RELEASED', name='booking_status_enum')
+        booking_status_enum.create(bind, checkfirst=True)
 
-    document_status_enum = postgresql.ENUM('VALID', 'SUPERSEDED', 'REVOKED', name='document_status_enum')
-    document_status_enum.create(op.get_bind(), checkfirst=True)
+        decision_action_enum = postgresql.ENUM('APPROVED', 'REJECTED', 'CORRECTION_REQUESTED', name='decision_action_enum')
+        decision_action_enum.create(bind, checkfirst=True)
 
-    blockchain_tx_status_enum = postgresql.ENUM('PENDING', 'CONFIRMED', 'FAILED', name='blockchain_tx_status_enum')
-    blockchain_tx_status_enum.create(op.get_bind(), checkfirst=True)
+        document_status_enum = postgresql.ENUM('VALID', 'SUPERSEDED', 'REVOKED', name='document_status_enum')
+        document_status_enum.create(bind, checkfirst=True)
+
+        blockchain_tx_status_enum = postgresql.ENUM('PENDING', 'CONFIRMED', 'FAILED', name='blockchain_tx_status_enum')
+        blockchain_tx_status_enum.create(bind, checkfirst=True)
 
     # 2. Departments
     op.create_table(
@@ -51,7 +57,7 @@ def upgrade() -> None:
         sa.Column('name', sa.String(length=255), nullable=False),
         sa.Column('code', sa.String(length=50), nullable=False),
         sa.Column('contact_email', sa.String(length=255), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=now_default, nullable=False),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('name')
     )
@@ -66,8 +72,9 @@ def upgrade() -> None:
         sa.Column('full_name', sa.String(length=255), nullable=False),
         sa.Column('role', sa.Enum('STUDENT_CLUB', 'AUTHORITY', 'VERIFIER', 'ADMIN', name='user_role_enum'), nullable=False),
         sa.Column('department_id', sa.Integer(), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('password_hash', sa.String(length=255), nullable=True),
+        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=true_default),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=now_default, nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(['department_id'], ['departments.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id')
@@ -86,8 +93,8 @@ def upgrade() -> None:
         sa.Column('location', sa.String(length=255), nullable=False),
         sa.Column('capacity', sa.Integer(), nullable=False),
         sa.Column('equipment_spec', sa.Text(), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=true_default),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=now_default, nullable=False),
         sa.ForeignKeyConstraint(['department_id'], ['departments.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
@@ -104,7 +111,7 @@ def upgrade() -> None:
         sa.Column('organizer_user_id', sa.Integer(), nullable=False),
         sa.Column('status', sa.Enum('DRAFT', 'PENDING', 'PARTIALLY_APPROVED', 'APPROVED', 'REJECTED', 'CANCELLED', name='event_status_enum'), nullable=False),
         sa.Column('expected_attendance', sa.Integer(), nullable=False, server_default=sa.text('0')),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=now_default, nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(['organizer_user_id'], ['users.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
@@ -122,7 +129,7 @@ def upgrade() -> None:
         sa.Column('current_version', sa.Integer(), nullable=False, server_default=sa.text('1')),
         sa.Column('status', sa.Enum('PENDING', 'CORRECTION_REQUESTED', 'APPROVED', 'REJECTED', 'CANCELLED', name='dept_request_status_enum'), nullable=False),
         sa.Column('remarks', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=now_default, nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(['department_id'], ['departments.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['event_id'], ['events.id'], ondelete='CASCADE'),
@@ -142,7 +149,7 @@ def upgrade() -> None:
         sa.Column('start_time', sa.DateTime(timezone=True), nullable=False),
         sa.Column('end_time', sa.DateTime(timezone=True), nullable=False),
         sa.Column('status', sa.Enum('CONFIRMED', 'RELEASED', name='booking_status_enum'), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=now_default, nullable=False),
         sa.ForeignKeyConstraint(['department_request_id'], ['department_requests.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['resource_id'], ['resources.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
@@ -160,7 +167,7 @@ def upgrade() -> None:
         sa.Column('department_request_id', sa.Integer(), nullable=False),
         sa.Column('version_number', sa.Integer(), nullable=False),
         sa.Column('requested_payload_json', sa.Text(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=now_default, nullable=False),
         sa.ForeignKeyConstraint(['department_request_id'], ['department_requests.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
@@ -176,7 +183,7 @@ def upgrade() -> None:
         sa.Column('reviewer_user_id', sa.Integer(), nullable=False),
         sa.Column('action', sa.Enum('APPROVED', 'REJECTED', 'CORRECTION_REQUESTED', name='decision_action_enum'), nullable=False),
         sa.Column('remarks', sa.Text(), nullable=True),
-        sa.Column('timestamp', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('timestamp', sa.DateTime(timezone=True), server_default=now_default, nullable=False),
         sa.ForeignKeyConstraint(['department_request_id'], ['department_requests.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['reviewer_user_id'], ['users.id'], ondelete='RESTRICT'),
         sa.PrimaryKeyConstraint('id')
@@ -194,7 +201,7 @@ def upgrade() -> None:
         sa.Column('digital_signature', sa.Text(), nullable=False),
         sa.Column('storage_path', sa.String(length=500), nullable=False),
         sa.Column('status', sa.Enum('VALID', 'SUPERSEDED', 'REVOKED', name='document_status_enum'), nullable=False),
-        sa.Column('issued_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('issued_at', sa.DateTime(timezone=True), server_default=now_default, nullable=False),
         sa.ForeignKeyConstraint(['department_request_id'], ['department_requests.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
@@ -213,7 +220,7 @@ def upgrade() -> None:
         sa.Column('contract_address', sa.String(length=42), nullable=True),
         sa.Column('status', sa.Enum('PENDING', 'CONFIRMED', 'FAILED', name='blockchain_tx_status_enum'), nullable=False),
         sa.Column('error_message', sa.Text(), nullable=True),
-        sa.Column('submitted_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('submitted_at', sa.DateTime(timezone=True), server_default=now_default, nullable=False),
         sa.Column('confirmed_at', sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(['permission_letter_id'], ['permission_letters.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
@@ -234,7 +241,7 @@ def upgrade() -> None:
         sa.Column('target_id', sa.String(length=100), nullable=False),
         sa.Column('details_json', sa.Text(), nullable=True),
         sa.Column('ip_address', sa.String(length=45), nullable=True),
-        sa.Column('timestamp', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+        sa.Column('timestamp', sa.DateTime(timezone=True), server_default=now_default, nullable=False),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_audit_logs_action'), 'audit_logs', ['action'], unique=False)
@@ -245,6 +252,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    is_postgres = bind.dialect.name == "postgresql"
+
     op.drop_table('audit_logs')
     op.drop_table('blockchain_records')
     op.drop_table('permission_letters')
@@ -257,12 +267,12 @@ def downgrade() -> None:
     op.drop_table('users')
     op.drop_table('departments')
 
-    # Drop enums
-    sa.Enum(name='blockchain_tx_status_enum').drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name='document_status_enum').drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name='decision_action_enum').drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name='booking_status_enum').drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name='dept_request_status_enum').drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name='event_status_enum').drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name='resource_type_enum').drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name='user_role_enum').drop(op.get_bind(), checkfirst=True)
+    if is_postgres:
+        sa.Enum(name='blockchain_tx_status_enum').drop(bind, checkfirst=True)
+        sa.Enum(name='document_status_enum').drop(bind, checkfirst=True)
+        sa.Enum(name='decision_action_enum').drop(bind, checkfirst=True)
+        sa.Enum(name='booking_status_enum').drop(bind, checkfirst=True)
+        sa.Enum(name='dept_request_status_enum').drop(bind, checkfirst=True)
+        sa.Enum(name='event_status_enum').drop(bind, checkfirst=True)
+        sa.Enum(name='resource_type_enum').drop(bind, checkfirst=True)
+        sa.Enum(name='user_role_enum').drop(bind, checkfirst=True)

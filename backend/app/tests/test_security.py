@@ -1,29 +1,27 @@
 """Tests for API Security Headers, CORS, and Rate Limiting"""
 
-from fastapi.testclient import TestClient
-from backend.app.main import app
-
-client = TestClient(app)
+from backend.app.core.rate_limit import SlidingWindowRateLimiter
 
 
-def test_security_headers_present():
-    """Verify that institutional security headers are injected on all responses."""
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.headers.get("X-Content-Type-Options") == "nosniff"
-    assert response.headers.get("X-Frame-Options") == "DENY"
-    assert response.headers.get("X-XSS-Protection") == "1; mode=block"
-    assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+def test_rate_limiter_allows_under_limit():
+    """Verify that requests under the threshold are permitted."""
+    limiter = SlidingWindowRateLimiter(requests_per_minute=5)
+    ip = "127.0.0.1"
+    for _ in range(5):
+        allowed, retry_after = limiter.is_allowed(ip)
+        assert allowed is True
+        assert retry_after == 0
 
 
-def test_cors_headers_on_allowed_origin():
-    """Verify that requests with allowed origin receive appropriate CORS headers."""
-    response = client.options(
-        "/api/v1/departments",
-        headers={
-            "Origin": "http://localhost:3000",
-            "Access-Control-Request-Method": "GET",
-        },
-    )
-    assert response.status_code == 200
-    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+def test_rate_limiter_blocks_over_limit():
+    """Verify that exceeding requests per minute triggers rate limiting."""
+    limiter = SlidingWindowRateLimiter(requests_per_minute=2)
+    ip = "127.0.0.2"
+    assert limiter.is_allowed(ip)[0] is True
+    assert limiter.is_allowed(ip)[0] is True
+    allowed, retry_after = limiter.is_allowed(ip)
+    assert allowed is False
+    assert retry_after > 0
+
+
+

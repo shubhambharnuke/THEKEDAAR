@@ -24,13 +24,21 @@ class Settings(BaseSettings):
         default=["http://localhost:3000", "http://127.0.0.1:3000"]
     )
 
-    # Database (Neon PostgreSQL)
+    # Database (SQLite Local-First default)
     DATABASE_URL: str = Field(
-        default="postgresql://postgres:postgres@localhost:5432/thekedar",
-        description="Neon PostgreSQL pooled connection URL",
+        default=f"sqlite:///{(Path(__file__).resolve().parent.parent.parent / 'data' / 'thekedar.db').as_posix()}",
+        description="Database connection URL (defaults to local SQLite file)",
     )
 
-    # Better Auth / JWT Bridge
+    # FastAPI Local Authentication & JWT
+    JWT_SECRET_KEY: str = Field(
+        default="thekedar-super-secret-local-jwt-signing-key-32-chars-min",
+        description="Cryptographic secret key for signing local FastAPI JWT tokens",
+    )
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
+
+    # Legacy Better Auth / JWT Bridge (kept for backward compatibility)
     BETTER_AUTH_SECRET: str = Field(
         default="default-development-secret-minimum-32-characters-long",
         description="Shared secret or JWT verification key from Better Auth",
@@ -39,7 +47,6 @@ class Settings(BaseSettings):
         default="http://localhost:3000/api/auth/jwks",
         description="Next.js Better Auth JWKS endpoint for token signature verification",
     )
-    JWT_ALGORITHM: str = "RS256"
 
     # Ethereum Sepolia Blockchain
     SEPOLIA_RPC_URL: str = Field(

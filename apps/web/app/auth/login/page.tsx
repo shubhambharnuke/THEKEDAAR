@@ -31,11 +31,14 @@ export default function LoginPage() {
         return;
       }
 
-      // Route based on role or default to club dashboard
-      if (email.includes("dean") || email.includes("auth")) {
+      // Route based on verified role from backend
+      const userRole = res.data?.user?.role;
+      if (userRole === "AUTHORITY") {
         router.push("/authority/dashboard");
-      } else if (email.includes("admin")) {
+      } else if (userRole === "ADMIN") {
         router.push("/admin/audit");
+      } else if (userRole === "VERIFIER") {
+        router.push("/verify");
       } else {
         router.push("/club/dashboard");
       }

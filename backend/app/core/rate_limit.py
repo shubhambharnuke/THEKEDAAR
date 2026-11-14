@@ -35,16 +35,26 @@ verify_rate_limiter = SlidingWindowRateLimiter(requests_per_minute=30)
 auth_rate_limiter = SlidingWindowRateLimiter(requests_per_minute=20)
 
 
-class SecurityAndRateLimitMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # 1. Rate Limiting Check on sensitive endpoints
-        path = request.url.path
-        client_ip = request.client.host if request.client else "unknown"
+class SecurityAndRateLimitMiddleware:
+    """Pure ASGI middleware for sliding window rate-limiting and security headers."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        method = scope.get("method", "GET")
+        client = scope.get("client")
+        client_ip = client[0] if client else "unknown"
 
         if "/api/v1/documents/verify" in path:
             allowed, retry_after = verify_rate_limiter.is_allowed(client_ip)
             if not allowed:
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     content={
                         "detail": "Rate limit exceeded for document verification. Please retry after some time.",
@@ -52,10 +62,12 @@ class SecurityAndRateLimitMiddleware(BaseHTTPMiddleware):
                     },
                     headers={"Retry-After": str(retry_after)},
                 )
-        elif "/api/v1/auth" in path and request.method == "POST":
+                await response(scope, receive, send)
+                return
+        elif "/api/v1/auth" in path and method == "POST":
             allowed, retry_after = auth_rate_limiter.is_allowed(client_ip)
             if not allowed:
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     content={
                         "detail": "Rate limit exceeded for authentication requests.",
@@ -63,15 +75,18 @@ class SecurityAndRateLimitMiddleware(BaseHTTPMiddleware):
                     },
                     headers={"Retry-After": str(retry_after)},
                 )
+                await response(scope, receive, send)
+                return
 
-        # 2. Process Request
-        response = await call_next(request)
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.append((b"x-content-type-options", b"nosniff"))
+                headers.append((b"x-frame-options", b"DENY"))
+                headers.append((b"x-xss-protection", b"1; mode=block"))
+                headers.append((b"referrer-policy", b"strict-origin-when-cross-origin"))
+                headers.append((b"permissions-policy", b"camera=(), microphone=(), geolocation=()"))
+                message["headers"] = headers
+            await send(message)
 
-        # 3. Inject Institutional Security Headers
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-
-        return response
+        await self.app(scope, receive, send_wrapper)

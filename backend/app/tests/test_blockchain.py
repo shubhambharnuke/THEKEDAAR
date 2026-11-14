@@ -68,8 +68,9 @@ def test_blockchain_document_hash_submission(db):
 
     assert record.id is not None
     assert record.permission_letter_id == letter.id
-    assert record.tx_hash is not None
-    assert record.status in (BlockchainTxStatus.PENDING, BlockchainTxStatus.CONFIRMED)
+    assert record.status in (BlockchainTxStatus.PENDING, BlockchainTxStatus.CONFIRMED, BlockchainTxStatus.FAILED)
+    if record.status == BlockchainTxStatus.FAILED:
+        assert record.error_message is not None
 
 
 def test_blockchain_verify_hash_offline_fallback():

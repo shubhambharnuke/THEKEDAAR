@@ -20,9 +20,7 @@
                           accessible primitives   interface and reusable
                           (Radix UI where useful) components
 
-  Authentication          **Better Auth**         Sign-in, sessions, and
-                                                  authentication
-                                                  management
+  Authentication          **FastAPI Local Auth**  Secure password hashing, JWT issuance, role‑based access control
 
   Backend API             **Python + FastAPI**    Booking rules,
                                                   approvals,
@@ -30,7 +28,7 @@
                                                   documents, and
                                                   blockchain integration
 
-  Primary database        **Neon PostgreSQL**     Users/application data,
+  Primary database        **SQLite**     Local file‑based DB, no external service
                                                   resources,
                                                   availability, requests,
                                                   approvals, and audit

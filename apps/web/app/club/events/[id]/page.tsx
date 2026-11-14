@@ -17,7 +17,10 @@ import {
   ArrowLeft,
   X,
   FileText,
+  Loader2,
 } from "lucide-react";
+import { thekedarApi } from "@/lib/api";
+import { useSession } from "@/lib/auth-client";
 
 interface SubRequest {
   id: number;
@@ -39,93 +42,128 @@ interface SubRequest {
 export default function EventDetailPage() {
   const params = useParams();
   const eventId = params.id as string;
+  const { data: sessionData } = useSession();
 
-  const [event, setEvent] = React.useState({
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [event, setEvent] = React.useState<any>({
     id: eventId,
-    title: "Annual Tech Symposium & Flagship Hackathon",
-    description: "Multi-track technical symposium covering AI, Web3, and Systems Engineering.",
-    expected_attendance: 450,
-    status: "PARTIALLY_APPROVED",
-    created_at: "2026-10-25 10:00:00 UTC",
-    organizer_name: "Aarav Patel (ACM Chapter President)",
+    title: `Event #${eventId}`,
+    description: "",
+    expected_attendance: 0,
+    status: "PENDING",
+    created_at: "",
+    organizer_name: "Club Organizer",
   });
 
-  const [subRequests, setSubRequests] = React.useState<SubRequest[]>([
-    {
-      id: 101,
-      department_id: 1,
-      department_name: "Dean of Academic Affairs",
-      department_code: "DEAN_ACAD",
-      current_version: 1,
-      status: "APPROVED",
-      letter_id: "PL-DEAN_ACAD-0001-V1-A8F92D",
-      remarks: "Approved for academic use. Ensure sound limits are maintained.",
-      resources: [
-        {
-          name: "Sir Visvesvaraya Seminar Hall A",
-          code: "SEM_HALL_A",
-          start: "2026-11-05 09:00",
-          end: "2026-11-05 17:00",
-        },
-      ],
-    },
-    {
-      id: 102,
-      department_id: 2,
-      department_name: "Dean of Student Welfare",
-      department_code: "STUDENT_WELFARE",
-      current_version: 1,
-      status: "CORRECTION_REQUESTED",
-      remarks: "Auditorium is booked until 10:00 AM for university assembly. Please modify start time to 10:30 AM.",
-      resources: [
-        {
-          name: "Dr. APJ Abdul Kalam Main Auditorium",
-          code: "AUDI_MAIN",
-          start: "2026-11-05 09:00",
-          end: "2026-11-05 18:00",
-        },
-      ],
-    },
-  ]);
+  const [subRequests, setSubRequests] = React.useState<SubRequest[]>([]);
 
   // Modal State for Resubmission
   const [resubmittingReq, setResubmittingReq] = React.useState<SubRequest | null>(null);
   const [newStartTime, setNewStartTime] = React.useState("10:30");
   const [newEndTime, setNewEndTime] = React.useState("18:00");
   const [resubmitLoading, setResubmitLoading] = React.useState(false);
+  const [resubmitError, setResubmitError] = React.useState<string | null>(null);
 
-  const handleResubmit = () => {
+  const fetchEventData = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await thekedarApi.getEvent(Number(eventId));
+      if (data) {
+        setEvent({
+          id: data.id,
+          title: data.title,
+          description: data.description || "No description provided.",
+          expected_attendance: data.expected_attendance || 0,
+          status: data.status,
+          created_at: data.created_at || "",
+          organizer_name: data.organizer?.full_name || "Club Representative",
+        });
+
+        const mapped: SubRequest[] = (data.department_requests || []).map((dr: any) => {
+          const items = dr.requested_items || [];
+          const bookings = dr.bookings || [];
+
+          // Derive resource display from requested_items or confirmed bookings
+          let resList: Array<{ name: string; code: string; start: string; end: string }> = [];
+          if (items.length > 0) {
+            resList = items.map((it: any) => ({
+              name: it.resource_name || "Department Venue",
+              code: it.resource_code || "ROOM",
+              start: it.start_time?.slice(0, 16).replace("T", " ") || "",
+              end: it.end_time?.slice(11, 16) || "",
+            }));
+          } else if (bookings.length > 0) {
+            resList = bookings.map((b: any) => ({
+              name: b.resource?.name || "Allocated Facility",
+              code: b.resource?.code || "RES",
+              start: b.start_time?.slice(0, 16).replace("T", " ") || "",
+              end: b.end_time?.slice(11, 16) || "",
+            }));
+          }
+
+          return {
+            id: dr.id,
+            department_id: dr.department_id,
+            department_name: dr.department_name || dr.department?.name || `Department #${dr.department_id}`,
+            department_code: dr.department_code || dr.department?.code || "DEPT",
+            current_version: dr.current_version || 1,
+            status: dr.status,
+            remarks: dr.remarks,
+            letter_id: dr.permission_letter_id || dr.permission_letter?.id,
+            resources: resList,
+          };
+        });
+        setSubRequests(mapped);
+      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to load event details from database.");
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId]);
+
+  React.useEffect(() => {
+    fetchEventData();
+  }, [fetchEventData]);
+
+  const handleResubmit = async () => {
     if (!resubmittingReq) return;
     setResubmitLoading(true);
+    setResubmitError(null);
 
-    setTimeout(() => {
-      // Simulate version increment and status reset to PENDING
-      setSubRequests(
-        subRequests.map((r) =>
-          r.id === resubmittingReq.id
-            ? {
-                ...r,
-                current_version: r.current_version + 1,
-                status: "PENDING",
-                remarks: undefined,
-                resources: [
-                  {
-                    ...r.resources[0],
-                    start: `2026-11-05 ${newStartTime}`,
-                    end: `2026-11-05 ${newEndTime}`,
-                  },
-                ],
-              }
-            : r
-        )
-      );
-      setResubmitLoading(false);
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const firstRes = resubmittingReq.resources[0];
+      const startDateTime = `${todayStr}T${newStartTime}:00Z`;
+      const endDateTime = `${todayStr}T${newEndTime}:00Z`;
+
+      await thekedarApi.resubmitRequest(resubmittingReq.id, {
+        resource_bookings: [
+          {
+            resource_id: resubmittingReq.department_id,
+            start_time: startDateTime,
+            end_time: endDateTime,
+          },
+        ],
+        remarks: "Resubmitted with adjusted timing.",
+      });
+
+      await fetchEventData();
       setResubmittingReq(null);
-    }, 600);
+    } catch (err: any) {
+      setResubmitError(err?.message || "Failed to resubmit request.");
+    } finally {
+      setResubmitLoading(false);
+    }
   };
 
+  const userName = sessionData?.user?.full_name || "Club Representative";
+  const userEmail = sessionData?.user?.email || "club@college.edu";
+
   return (
-    <AppShell userRole="STUDENT_CLUB" userName="ACM Chapter Lead" userEmail="acm.lead@college.edu">
+    <AppShell userRole="STUDENT_CLUB" userName={userName} userEmail={userEmail}>
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Breadcrumb */}
         <div className="flex items-center space-x-2 text-xs font-mono text-muted">

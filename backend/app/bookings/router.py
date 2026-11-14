@@ -15,12 +15,14 @@ from backend.app.database.models import (
     DepartmentRequest,
     Department,
     RequestVersion,
+    PermissionLetter,
 )
 from backend.app.bookings.schemas import (
     EventCreateRequest,
     EventDetailResponse,
     EventSummaryResponse,
     DepartmentRequestRead,
+    DecisionHistoryItemRead,
     RequestResubmitPayload,
 )
 from backend.app.bookings.service import (
@@ -51,16 +53,49 @@ def _serialize_department_request(req: DepartmentRequest, db: Session) -> Depart
     dept_name = req.department.name if req.department else None
     dept_code = req.department.code if req.department else None
 
+    # Retrieve event and organizer info if available
+    ev_title = req.event.title if req.event else None
+    org_name = req.event.organizer.full_name if req.event and req.event.organizer else None
+    org_email = req.event.organizer.email if req.event and req.event.organizer else None
+
+    # Retrieve latest valid permission letter id if approved
+    letter = db.scalar(
+        select(PermissionLetter)
+        .where(PermissionLetter.department_request_id == req.id)
+        .order_by(PermissionLetter.version_number.desc())
+    )
+    letter_id = letter.id if letter else None
+
+    # Retrieve decision history
+    decisions_list = []
+    if req.decisions:
+        for d in req.decisions:
+            decisions_list.append(
+                DecisionHistoryItemRead(
+                    id=d.id,
+                    version_number=d.version_number,
+                    action=d.action.value if hasattr(d.action, "value") else str(d.action),
+                    remarks=d.remarks,
+                    reviewer_name=d.reviewer.full_name if d.reviewer else "Authority",
+                    timestamp=d.timestamp,
+                )
+            )
+
     return DepartmentRequestRead(
         id=req.id,
         event_id=req.event_id,
         department_id=req.department_id,
         department_name=dept_name,
         department_code=dept_code,
+        event_title=ev_title,
+        organizer_name=org_name,
+        organizer_email=org_email,
         current_version=req.current_version,
         status=req.status,
         remarks=req.remarks,
         requested_items=items,
+        permission_letter_id=letter_id,
+        decisions=decisions_list,
         created_at=req.created_at,
         updated_at=req.updated_at,
     )

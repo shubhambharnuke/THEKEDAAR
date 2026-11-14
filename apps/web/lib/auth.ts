@@ -1,20 +1,10 @@
-import { betterAuth } from "better-auth";
-import { jwt } from "better-auth/plugins";
+/**
+ * Local Authentication System for THEKEDAR
+ * 
+ * Note: Better Auth runtime has been migrated to local FastAPI authentication.
+ * Client authentication and session management is handled by '@/lib/auth-client'.
+ */
 
-export const auth = betterAuth({
-  secret: process.env.BETTER_AUTH_SECRET || "default-development-secret-minimum-32-characters-long",
-  baseURL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-  emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: false,
-  },
-  plugins: [
-    jwt({
-      jwks: {
-        keyPairConfig: {
-          alg: "RS256",
-        },
-      },
-    }),
-  ],
-});
+export const auth = {
+  isLocalAuth: true,
+};

@@ -1,4 +1,15 @@
-import { auth } from "@/lib/auth";
-import { toNextJsHandler } from "better-auth/next-js";
+import { NextResponse } from "next/server";
 
-export const { GET, POST } = toNextJsHandler(auth.handler);
+export async function GET() {
+  return NextResponse.json(
+    { message: "Authentication is managed directly by the FastAPI backend at /api/v1/auth" },
+    { status: 404 }
+  );
+}
+
+export async function POST() {
+  return NextResponse.json(
+    { message: "Authentication is managed directly by the FastAPI backend at /api/v1/auth" },
+    { status: 404 }
+  );
+}

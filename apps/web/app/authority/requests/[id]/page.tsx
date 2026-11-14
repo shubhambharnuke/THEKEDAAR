@@ -17,48 +17,93 @@ import {
   History,
   FileCheck,
   User,
+  Loader2,
 } from "lucide-react";
+import { thekedarApi } from "@/lib/api";
+import { useSession } from "@/lib/auth-client";
 
 export default function AuthorityReviewPage() {
   const params = useParams();
   const router = useRouter();
   const requestId = params.id as string;
+  const { data: sessionData } = useSession();
 
   const [remarks, setRemarks] = React.useState("");
   const [submittingAction, setSubmittingAction] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
 
-  // Mock Request Details
-  const requestData = {
+  const [requestData, setRequestData] = React.useState({
     id: requestId,
     event_id: 1,
-    event_title: "Annual Tech Symposium & Flagship Hackathon",
-    organizer_name: "Aarav Patel (ACM Chapter President)",
-    organizer_email: "acm.lead@college.edu",
-    expected_attendance: 450,
-    version: 2,
+    event_title: "Event Request",
+    organizer_name: "Club Representative",
+    organizer_email: "club@college.edu",
+    expected_attendance: 0,
+    version: 1,
     status: "PENDING",
-    venue_name: "Dr. APJ Abdul Kalam Main Auditorium",
-    venue_code: "AUDI_MAIN",
-    venue_capacity: 800,
-    venue_location: "Central Campus, Building A, Ground Floor",
-    equipment_spec: "Sound console, Stage lighting, 4 wireless mics, Dual 4K laser projectors",
-    requested_start: "2026-11-05 10:30 UTC",
-    requested_end: "2026-11-05 18:00 UTC",
-    changelog: [
-      {
-        version: "v2.0 (Current)",
-        note: "Start time shifted from 09:00 to 10:30 UTC as requested by authority to avoid assembly overlap.",
-        date: "2026-10-27 02:40 UTC",
-      },
-      {
-        version: "v1.0 (Initial)",
-        note: "Initial submission requesting 09:00 - 18:00 UTC.",
-        date: "2026-10-25 10:00 UTC",
-      },
-    ],
-  };
+    venue_name: "Venue",
+    venue_code: "VENUE",
+    venue_capacity: 0,
+    venue_location: "Campus",
+    equipment_spec: "Standard equipment",
+    requested_start: "",
+    requested_end: "",
+    permission_letter_id: null as string | null,
+    requested_items: [] as any[],
+    changelog: [] as Array<{ version: string; note: string; date: string }>,
+  });
+
+  const fetchRequest = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await thekedarApi.getDepartmentRequest(Number(requestId));
+      if (data) {
+        const firstItem = data.requested_items && data.requested_items[0];
+        const firstBooking = data.bookings && data.bookings[0];
+
+        const venueName = firstItem?.resource_name || firstBooking?.resource?.name || "Allocated Facility";
+        const venueCode = firstItem?.resource_code || firstBooking?.resource?.code || "VENUE";
+        const startTime = firstItem?.start_time || firstBooking?.start_time || "";
+        const endTime = firstItem?.end_time || firstBooking?.end_time || "";
+
+        setRequestData({
+          id: String(data.id),
+          event_id: data.event_id,
+          event_title: data.event_title || data.event?.title || `Event #${data.event_id}`,
+          organizer_name: data.organizer_name || data.event?.organizer?.full_name || "Club Representative",
+          organizer_email: data.organizer_email || data.event?.organizer?.email || "club@college.edu",
+          expected_attendance: data.event?.expected_attendance || 0,
+          version: data.current_version || 1,
+          status: data.status || "PENDING",
+          venue_name: venueName,
+          venue_code: venueCode,
+          venue_capacity: firstBooking?.resource?.capacity || 100,
+          venue_location: firstBooking?.resource?.location || "Campus Block",
+          equipment_spec: firstBooking?.resource?.equipment_spec || "Standard equipment",
+          requested_start: startTime ? startTime.slice(0, 16).replace("T", " ") : "",
+          requested_end: endTime ? endTime.slice(0, 16).replace("T", " ") : "",
+          permission_letter_id: data.permission_letter_id || null,
+          requested_items: data.requested_items || [],
+          changelog: (data.decisions || []).map((d: any) => ({
+            version: `Decision by ${d.reviewer_name || d.reviewer?.full_name || "Authority"}`,
+            note: d.remarks || d.action,
+            date: d.timestamp ? d.timestamp.slice(0, 16).replace("T", " ") : "",
+          })),
+        });
+      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to load request details.");
+    } finally {
+      setLoading(false);
+    }
+  }, [requestId]);
+
+  React.useEffect(() => {
+    fetchRequest();
+  }, [fetchRequest]);
 
   const handleDecision = async (action: "APPROVE" | "REJECT" | "REQUEST_CORRECTION") => {
     setError(null);
@@ -71,37 +116,38 @@ export default function AuthorityReviewPage() {
     setSubmittingAction(action);
 
     try {
-      // Simulate API call to backend POST /api/v1/department-requests/{id}/decision
-      setTimeout(() => {
-        if (action === "APPROVE") {
-          setSuccessMessage(
-            "Request officially approved! Confirmed booking has been locked, and cryptographic permission letter has been signed and dispatched."
-          );
-        } else if (action === "REQUEST_CORRECTION") {
-          setSuccessMessage(
-            "Correction instructions returned to organizer. Sub-request status marked Needs Correction."
-          );
-        } else {
-          setSuccessMessage("Request officially rejected.");
-        }
-        setSubmittingAction(null);
+      await thekedarApi.submitDecision(Number(requestId), action, remarks);
 
-        // Redirect after brief notification
-        setTimeout(() => {
-          router.push("/authority/dashboard");
-        }, 1500);
-      }, 700);
+      if (action === "APPROVE") {
+        setSuccessMessage(
+          "Request officially approved! Confirmed booking has been locked, and cryptographic permission letter has been signed and dispatched."
+        );
+      } else if (action === "REQUEST_CORRECTION") {
+        setSuccessMessage(
+          "Correction instructions returned to organizer. Sub-request status marked Needs Correction."
+        );
+      } else {
+        setSuccessMessage("Request officially rejected.");
+      }
+      setSubmittingAction(null);
+
+      setTimeout(() => {
+        router.push("/authority/dashboard");
+      }, 1500);
     } catch (err: any) {
       setError(err?.message || "Failed to submit decision.");
       setSubmittingAction(null);
     }
   };
 
+  const userName = sessionData?.user?.full_name || "Department Authority";
+  const userEmail = sessionData?.user?.email || "authority@college.edu";
+
   return (
     <AppShell
       userRole="AUTHORITY"
-      userName="Prof. Rajesh Sharma"
-      userEmail="dean.sw@college.edu"
+      userName={userName}
+      userEmail={userEmail}
     >
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Navigation Breadcrumb */}
@@ -128,7 +174,16 @@ export default function AuthorityReviewPage() {
           </div>
         )}
 
-        {/* Split Layout Container */}
+        {/* Loading Indicator */}
+        {loading && (
+          <div className="bg-white border border-border p-12 text-center text-muted font-mono text-xs rounded-[3px]">
+            <Loader2 className="w-5 h-5 animate-spin inline mr-2 text-signal-orange" />
+            Loading request details from database...
+          </div>
+        )}
+
+        {!loading && (
+        /* Split Layout Container */
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* LEFT PANE: Event & Venue Review (7 Cols) */}
           <div className="lg:col-span-7 space-y-5">
@@ -167,35 +222,55 @@ export default function AuthorityReviewPage() {
                 </h3>
               </div>
 
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-muted font-mono">Facility:</span>
-                  <span className="font-semibold text-ink font-sans">
-                    {requestData.venue_name} ({requestData.venue_code})
-                  </span>
+              {requestData.requested_items.length > 0 ? (
+                <div className="space-y-3">
+                  {requestData.requested_items.map((item: any, idx: number) => (
+                    <div key={idx} className="p-3 bg-paper border border-border rounded-[2px] space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-semibold text-ink font-sans">
+                          {item.resource_name || "Facility"} ({item.resource_code || "ROOM"})
+                        </span>
+                        <span className="font-mono text-muted text-[11px]">Item #{idx + 1}</span>
+                      </div>
+                      <div className="text-xs font-mono text-muted flex items-center">
+                        <Clock className="w-3.5 h-3.5 mr-1.5 text-signal-orange shrink-0" />
+                        <span>
+                          {item.start_time?.slice(0, 16).replace("T", " ")} to {item.end_time?.slice(11, 16)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted font-mono">Location:</span>
-                  <span className="text-ink font-sans">{requestData.venue_location}</span>
+              ) : (
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted font-mono">Facility:</span>
+                    <span className="font-semibold text-ink font-sans">
+                      {requestData.venue_name} ({requestData.venue_code})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted font-mono">Location:</span>
+                    <span className="text-ink font-sans">{requestData.venue_location}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted font-mono">Max Seating Capacity:</span>
+                    <span className="font-mono text-ink font-semibold">{requestData.venue_capacity} seats</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted font-mono">Installed Equipment:</span>
+                    <span className="text-ink font-sans text-right max-w-xs">{requestData.equipment_spec}</span>
+                  </div>
+                  {/* Time Window Card */}
+                  <div className="p-3 bg-paper border border-border rounded-[2px] space-y-1 mt-2">
+                    <div className="text-[10px] font-mono uppercase text-muted">Requested Timing Window:</div>
+                    <div className="text-xs font-mono font-bold text-ink flex items-center">
+                      <Clock className="w-3.5 h-3.5 mr-1.5 text-signal-orange" />
+                      {requestData.requested_start} to {requestData.requested_end}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted font-mono">Max Seating Capacity:</span>
-                  <span className="font-mono text-ink font-semibold">{requestData.venue_capacity} seats</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted font-mono">Installed Equipment:</span>
-                  <span className="text-ink font-sans text-right max-w-xs">{requestData.equipment_spec}</span>
-                </div>
-              </div>
-
-              {/* Time Window Card */}
-              <div className="p-3 bg-paper border border-border rounded-[2px] space-y-1">
-                <div className="text-[10px] font-mono uppercase text-muted">Approved Timing Window:</div>
-                <div className="text-xs font-mono font-bold text-ink flex items-center">
-                  <Clock className="w-3.5 h-3.5 mr-1.5 text-signal-orange" />
-                  {requestData.requested_start} to {requestData.requested_end}
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Version Revision Changelog */}
@@ -275,11 +350,25 @@ export default function AuthorityReviewPage() {
 
             {/* Safety & Protocol Notice */}
             <div className="pt-3 border-t border-border text-[11px] text-muted font-mono space-y-1">
+              {requestData.permission_letter_id && (
+                <div className="p-2 bg-[#EBF5F0] border border-[#B9E2CE] text-[#237A50] rounded-[2px] mb-2 flex justify-between items-center">
+                  <span>Signed Letter: {requestData.permission_letter_id}</span>
+                  <a
+                    href={`http://localhost:8000/api/v1/documents/${requestData.permission_letter_id}/download`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline font-bold"
+                  >
+                    Download PDF
+                  </a>
+                </div>
+              )}
               <div>• Approving acquires an exclusive reservation lock.</div>
               <div>• Generates an RSA-signed letter stored with SHA-256 hash.</div>
             </div>
           </div>
         </div>
+        )}
       </div>
     </AppShell>
   );
