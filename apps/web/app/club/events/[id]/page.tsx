@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -18,6 +18,7 @@ import {
   X,
   FileText,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { thekedarApi } from "@/lib/api";
 import { useSession } from "@/lib/auth-client";
@@ -40,12 +41,15 @@ interface SubRequest {
 }
 
 export default function EventDetailPage() {
+  const router = useRouter();
   const params = useParams();
   const eventId = params.id as string;
   const { data: sessionData } = useSession();
 
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [event, setEvent] = React.useState<any>({
     id: eventId,
     title: `Event #${eventId}`,
@@ -128,6 +132,18 @@ export default function EventDetailPage() {
     fetchEventData();
   }, [fetchEventData]);
 
+  const handleDeleteEvent = async () => {
+    try {
+      setDeleting(true);
+      await thekedarApi.deleteEvent(Number(eventId));
+      router.push("/club/dashboard");
+    } catch (err: any) {
+      setError(err?.message || "Failed to delete event request.");
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   const handleResubmit = async () => {
     if (!resubmittingReq) return;
     setResubmitLoading(true);
@@ -185,7 +201,18 @@ export default function EventDetailPage() {
                 {event.title}
               </h1>
             </div>
-            <StatusBadge status={event.status} className="text-xs px-2.5 py-1" />
+            <div className="flex items-center space-x-3">
+              <StatusBadge status={event.status} className="text-xs px-2.5 py-1" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-red-600 hover:bg-red-50 hover:border-red-300"
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                Delete Request
+              </Button>
+            </div>
           </div>
 
           <p className="text-xs md:text-sm text-muted font-sans max-w-3xl leading-relaxed">
@@ -310,6 +337,40 @@ export default function EventDetailPage() {
             ))}
           </div>
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white border border-border max-w-sm w-full p-6 space-y-4 rounded-[3px] shadow-lg">
+              <div className="flex items-center space-x-2 text-red-600">
+                <Trash2 className="w-5 h-5 shrink-0" />
+                <h3 className="text-sm font-semibold font-sans">Delete Event Request</h3>
+              </div>
+              <p className="text-xs text-muted font-sans leading-relaxed">
+                Are you sure you want to delete <strong className="text-ink">{event.title}</strong>? All associated departmental booking requests and versions will be permanently removed.
+              </p>
+              <div className="pt-2 border-t border-border flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleDeleteEvent}
+                  isLoading={deleting}
+                  className="bg-red-600 hover:bg-red-700 text-white border-transparent"
+                >
+                  Confirm Delete
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Resubmission Modal */}
         {resubmittingReq && (

@@ -30,6 +30,8 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     role: Optional[UserRole] = UserRole.STUDENT_CLUB
+    department_id: Optional[int] = None
+    club_name: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -65,11 +67,20 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db)) -> Au
     if role == UserRole.ADMIN:
         role = UserRole.STUDENT_CLUB
 
+    dept_id = None
+    if role == UserRole.AUTHORITY and payload.department_id:
+        dept_id = payload.department_id
+
+    display_name = payload.full_name.strip()
+    if role == UserRole.STUDENT_CLUB and payload.club_name:
+        display_name = f"{display_name} ({payload.club_name.strip()})"
+
     hashed_pw = get_password_hash(payload.password)
     user = User(
         email=email_clean,
-        full_name=payload.full_name.strip(),
+        full_name=display_name,
         role=role,
+        department_id=dept_id,
         password_hash=hashed_pw,
         is_active=True,
     )

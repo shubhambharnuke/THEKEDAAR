@@ -161,6 +161,10 @@ def seed_database(db: Session) -> None:
     print("Database seeding completed successfully.")
 
 
+# Alias for backwards compatibility
+seed_all = seed_database
+
+
 if __name__ == "__main__":
     db = SessionLocal()
     try:

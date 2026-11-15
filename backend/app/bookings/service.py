@@ -315,3 +315,37 @@ def cancel_event(db: Session, event_id: int, user: User) -> Event:
     db.commit()
     db.refresh(event)
     return event
+
+
+def delete_event(db: Session, event_id: int, user: User) -> None:
+    """
+    Permanently deletes an event and all its associated child records if owned by user.
+    """
+    event = db.scalar(select(Event).where(Event.id == event_id))
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    if event.organizer_user_id != user.id and user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the event organizer or an admin can delete this event",
+        )
+
+    requests = db.scalars(
+        select(DepartmentRequest).where(DepartmentRequest.event_id == event_id)
+    ).all()
+    for req in requests:
+        # Delete versions, bookings, decision history
+        from backend.app.database.models import DecisionHistory, PermissionLetter, BlockchainRecord
+        # Clean permission letters and blockchain records
+        letters = db.scalars(select(PermissionLetter).where(PermissionLetter.department_request_id == req.id)).all()
+        for letter in letters:
+            db.query(BlockchainRecord).filter(BlockchainRecord.permission_letter_id == letter.id).delete()
+            db.delete(letter)
+        db.query(DecisionHistory).filter(DecisionHistory.department_request_id == req.id).delete()
+        db.query(RequestVersion).filter(RequestVersion.department_request_id == req.id).delete()
+        db.query(ResourceBooking).filter(ResourceBooking.department_request_id == req.id).delete()
+        db.delete(req)
+
+    db.delete(event)
+    db.commit()

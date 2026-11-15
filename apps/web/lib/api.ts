@@ -147,6 +147,8 @@ export const thekedarApi = {
     };
     return api.post<any>("/api/v1/events", body);
   },
+  cancelEvent: (id: number) => api.post<any>(`/api/v1/events/${id}/cancel`, {}),
+  deleteEvent: (id: number) => api.delete<void>(`/api/v1/events/${id}`),
   resubmitRequest: (
     requestId: number,
     payload: {

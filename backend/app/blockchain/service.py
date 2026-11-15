@@ -96,9 +96,10 @@ class BlockchainService:
                 })
 
                 signed_txn = self.w3.eth.account.sign_transaction(txn, private_key=settings.SIGNER_PRIVATE_KEY)
-                tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+                raw_tx = getattr(signed_txn, "raw_transaction", None) or getattr(signed_txn, "rawTransaction")
+                tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
                 tx_hash_str = tx_hash.hex()
-                logger.info("Submitted document hash to Sepolia: tx=%s", tx_hash_str)
+                logger.info("Submitted document hash to on-chain node: tx=%s", tx_hash_str)
             except Exception as e:
                 logger.error("Failed to submit on-chain transaction: %s", e)
                 record_status = BlockchainTxStatus.FAILED

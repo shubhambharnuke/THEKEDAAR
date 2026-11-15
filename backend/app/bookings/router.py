@@ -29,6 +29,7 @@ from backend.app.bookings.service import (
     create_event_with_department_requests,
     resubmit_department_request,
     cancel_event,
+    delete_event,
 )
 
 router = APIRouter(tags=["Events & Bookings"])
@@ -203,6 +204,17 @@ def cancel_event_route(
     """Cancel an event and release all associated confirmed bookings."""
     event = cancel_event(db, event_id, current_user)
     return get_event_detail(event.id, current_user, db)
+
+
+@router.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_event_route(
+    event_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Permanently delete an event request and all child data."""
+    delete_event(db, event_id, current_user)
+    return None
 
 
 @router.post("/department-requests/{request_id}/resubmit", response_model=DepartmentRequestRead)

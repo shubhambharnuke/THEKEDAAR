@@ -16,8 +16,10 @@ import { Input } from "@/components/ui/Input";
 import VerificationResult, {
   VerificationData,
 } from "@/components/verification/VerificationResult";
+import { useSession } from "@/lib/auth-client";
 
 export default function VerifyPage() {
+  const { data: sessionData } = useSession();
   const [activeTab, setActiveTab] = useState<"file" | "identifier">("file");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [identifier, setIdentifier] = useState("");
@@ -103,7 +105,17 @@ export default function VerifyPage() {
         try {
           const bcRes = await fetch(`${apiUrl}/api/v1/blockchain/verify/${docHash}`);
           if (bcRes.ok) {
-            blockchainData = await bcRes.json();
+            const rawBc = await bcRes.json();
+            blockchainData = {
+              is_registered: !!rawBc.verified_on_chain,
+              tx_hash: rawBc.details?.transaction_hash || null,
+              block_number: rawBc.details?.block_number || null,
+              timestamp: rawBc.details?.block_timestamp ? Math.floor(new Date(rawBc.details.block_timestamp).getTime() / 1000) : null,
+              issuer: rawBc.details?.issuer_address || null,
+              is_revoked: !!rawBc.details?.is_revoked,
+              network: rawBc.network || "Ethereum Sepolia",
+              message: rawBc.message,
+            };
           }
         } catch {
           // On-chain check gracefully degrades if RPC is offline
@@ -147,12 +159,32 @@ export default function VerifyPage() {
           </div>
 
           <div className="flex items-center space-x-4">
-            <Link
-              href="/auth/login"
-              className="px-3 py-1.5 border border-border bg-white text-ink text-xs font-mono uppercase tracking-wider hover:bg-neutral-50 transition"
-            >
-              Sign In
-            </Link>
+            {sessionData?.user ? (
+              <div className="flex items-center space-x-3">
+                <span className="text-xs font-mono text-muted hidden sm:inline">
+                  Signed in as <strong className="text-ink">{sessionData.user.full_name}</strong>
+                </span>
+                <Link
+                  href={
+                    sessionData.user.role === "AUTHORITY"
+                      ? "/authority/dashboard"
+                      : sessionData.user.role === "ADMIN"
+                      ? "/admin/audit"
+                      : "/club/dashboard"
+                  }
+                  className="px-3 py-1.5 border border-graphite bg-graphite text-white text-xs font-mono uppercase tracking-wider hover:bg-neutral-800 transition"
+                >
+                  Go to Dashboard &rarr;
+                </Link>
+              </div>
+            ) : (
+              <Link
+                href="/auth/login"
+                className="px-3 py-1.5 border border-border bg-white text-ink text-xs font-mono uppercase tracking-wider hover:bg-neutral-50 transition"
+              >
+                Sign In
+              </Link>
+            )}
           </div>
         </div>
       </header>

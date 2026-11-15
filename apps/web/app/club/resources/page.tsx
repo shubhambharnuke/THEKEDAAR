@@ -105,12 +105,15 @@ export default function ClubResourcesPage() {
 
     try {
       const data = await thekedarApi.checkAvailability(resourceId, startISO, endISO);
+      const isFree = data?.is_available ?? data?.available ?? true;
       setAvailabilityResult({
         resourceId,
-        available: data?.available ?? true,
-        message: data?.available
+        available: isFree,
+        message: isFree
           ? "Slot is completely free and available for booking."
-          : data?.detail || "Facility is reserved or has an overlapping booking for this slot.",
+          : (data?.conflicts && data.conflicts.length > 0)
+          ? `Reserved for '${data.conflicts[0].event_title || "Another Event"}' (${new Date(data.conflicts[0].start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${new Date(data.conflicts[0].end_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`
+          : "Facility is reserved or has an overlapping booking for this slot.",
       });
     } catch (err: any) {
       setAvailabilityResult({

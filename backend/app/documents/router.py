@@ -33,6 +33,7 @@ class VerificationCheckResult(BaseModel):
     hash_matched: bool
     status: Optional[str] = None
     letter_id: Optional[str] = None
+    document_hash: Optional[str] = None
     version_number: Optional[int] = None
     event_title: Optional[str] = None
     department_name: Optional[str] = None
@@ -192,6 +193,7 @@ async def verify_permission_document(
         hash_matched=hash_matched,
         status=letter_record.status.value,
         letter_id=letter_record.id,
+        document_hash=letter_record.document_hash,
         version_number=letter_record.version_number,
         event_title=event_title,
         department_name=dept_name,

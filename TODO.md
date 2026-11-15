@@ -23,18 +23,42 @@
 
 ## 2. Current Project Status
 
-**Current phase:** ALL PHASES COMPLETED (Phases A through G verified).
+**Current phase:** Phase H — UX & Feature Refinements (In Progress)
 
 **Verified Capabilities:**
 - Local SQLite database operational at `backend/data/thekedar.db` with enforced foreign keys.
 - FastAPI-managed local authentication with PBKDF2 password hashing and signed HS256 JWT tokens.
-- Decommissioned Better Auth and Neon PostgreSQL dependencies for local runtime.
 - Next.js frontend connected to backend via typed API client (`apps/web/lib/api.ts`) and local auth client (`apps/web/lib/auth-client.ts`).
-- End-to-end multi-department workflow, double-booking prevention, tamper-evident digital signatures, and Sepolia blockchain service fully functional.
-- Complete regression suite passing: 25/25 backend pytest tests pass, frontend TypeScript compiler reports 0 errors.
-- Windows PowerShell runbook documented in `RUNBOOK.md`.
+- End-to-end multi-department workflow, double-booking prevention, tamper-evident digital signatures, and local Ethereum node integration fully functional (Docker + Hardhat).
+- Complete regression suite passing: 25/25 backend pytest tests pass.
 
-**Next recommended action:** Ready for developer usage and local demonstration via the commands in `RUNBOOK.md`.
+---
+
+## Phase H — UX & Feature Refinements (Preserving Design Theme)
+
+### TASK-H01: Role-Specific Sign-In & Registration Experience
+- [x] **H01.1 — Dual Role Sign-In Experience**: Updated `/auth/login` with distinct tabs/options for **Student Club** and **Authority** sign-in while preserving theme aesthetics and routing to appropriate dashboards.
+- [x] **H01.2 — Role-Specific Registration**: Added dual-role registration page at `/auth/register`:
+  - **Club Registration**: Full Name, Club/Organization Name, Email, Password.
+  - **Authority Registration**: Full Name, Email, Password, Department Selection dropdown fetched live from `/api/v1/departments`.
+- [x] **H01.3 — Backend Registration API**: Updated `/api/v1/auth/register` to accept `role`, `department_id`, and `club_name`.
+
+### TASK-H02: Persistent Session During Document Verification
+- [x] **H02.1 — Verification Portal Session Continuity**: Updated `/verify` page header to check active session using `useSession()`. If the user is logged in, their name and a direct "Go to Dashboard →" link are displayed without resetting the session or forcing a re-login.
+
+### TASK-H03: Live Authority Resource Calendar
+- [x] **H03.1 — Replace Dummy Data in Authority Calendar**: Updated `/authority/resources` to fetch live resources and real events/bookings from `/api/v1/resources` and `/api/v1/events`.
+- [x] **H03.2 — Real Resource Time Slots**: Shows actual booking times, organizers, and approval states for the selected facility instead of hardcoded placeholders.
+
+### TASK-H04: Live Resource Catalog & Slot Availability in Club Section
+- [x] **H04.1 — Replace Hardcoded Dummy Slot Availability**: Fixed `/club/resources` to accurately consume the backend `/api/v1/resources/{id}/availability` collision responses (`is_available` and `conflicts`).
+- [x] **H04.2 — Dynamic Reservation Status**: Accurately shows whether a slot is free or already reserved for an event with its exact reservation window.
+
+### TASK-H05: Event Deletion / Cancellation for Clubs
+- [x] **H05.1 — Backend Cancel/Delete Endpoint**: Added `DELETE /api/v1/events/{id}` endpoint in `backend/app/bookings/router.py` & `service.py` to permanently delete an event, request versions, bookings, and decision records if owned by the user.
+- [x] **H05.2 — Frontend Delete Action**: Added "Delete Request" button with confirmation modal on the club event detail page (`/club/events/[id]`), matching the existing minimalist graphite/paper design theme.
+
+---
 
 ---
 

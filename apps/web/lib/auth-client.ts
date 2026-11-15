@@ -76,16 +76,29 @@ export const signUp = {
     name,
     email,
     password,
+    role,
+    department_id,
+    club_name,
   }: {
     name: string;
     email: string;
     password: string;
+    role?: "STUDENT_CLUB" | "AUTHORITY";
+    department_id?: number | null;
+    club_name?: string | null;
   }) => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ full_name: name, email, password }),
+        body: JSON.stringify({
+          full_name: name,
+          email,
+          password,
+          role: role || "STUDENT_CLUB",
+          department_id: department_id || null,
+          club_name: club_name || null,
+        }),
       });
 
       const data = await res.json();
