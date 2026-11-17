@@ -9,7 +9,7 @@ import { signUp } from "@/lib/auth-client";
 import { thekedarApi } from "@/lib/api";
 import { Users, Shield, ArrowRight, Building } from "lucide-react";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialRole = searchParams.get("role") === "AUTHORITY" ? "AUTHORITY" : "STUDENT_CLUB";
@@ -255,5 +255,13 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-paper flex items-center justify-center font-mono text-xs">Loading registration...</div>}>
+      <RegisterForm />
+    </React.Suspense>
   );
 }

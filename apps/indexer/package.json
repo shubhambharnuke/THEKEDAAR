@@ -1,0 +1,23 @@
+{
+  "name": "indexer",
+  "version": "1.0.0",
+  "description": "Blockchain Event Indexer for Thekedar Besu QBFT network",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/index.ts",
+    "rebuild": "ts-node src/index.ts --rebuild"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "viem": "^2.23.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^20.17.19",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}
