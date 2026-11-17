@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { Web3Providers } from "@/components/Web3Providers";
 
 export const viewport: Viewport = {
   themeColor: "#171717",
@@ -48,7 +49,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body className="h-full min-h-screen bg-paper text-ink font-sans antialiased selection:bg-neutral-200">
-        {children}
+        <Web3Providers>
+          {children}
+        </Web3Providers>
       </body>
     </html>
   );

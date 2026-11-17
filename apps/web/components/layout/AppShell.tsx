@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { WalletConnectPill } from "@/components/WalletConnectPill";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -150,6 +151,7 @@ export function AppShell({
           </div>
 
           <div className="flex items-center space-x-4">
+            <WalletConnectPill />
             <Link
               href="/verify"
               className="hidden sm:inline-flex items-center px-3 py-1.5 border border-border bg-paper text-ink font-mono text-xs hover:bg-neutral-100 transition"
