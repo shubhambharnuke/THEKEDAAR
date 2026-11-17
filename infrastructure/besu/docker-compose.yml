@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  node1:
+    image: hyperledger/besu:latest
+    container_name: besu-node1-deptA
+    volumes:
+      - ./genesis/genesis.json:/opt/besu/genesis.json:ro
+      - ./validators/node1/config.toml:/opt/besu/config.toml:ro
+      - ./validators/node1/data:/opt/besu/data
+    command:
+      - --config-file=/opt/besu/config.toml
+    ports:
+      - "8545:8545"
+      - "30303:30303"
+    networks:
+      besu-net:
+        aliases:
+          - node1
+    restart: unless-stopped
+
+  node2:
+    image: hyperledger/besu:latest
+    container_name: besu-node2-deptB
+    volumes:
+      - ./genesis/genesis.json:/opt/besu/genesis.json:ro
+      - ./validators/node2/config.toml:/opt/besu/config.toml:ro
+      - ./validators/node2/data:/opt/besu/data
+    command:
+      - --config-file=/opt/besu/config.toml
+    depends_on:
+      - node1
+    networks:
+      besu-net:
+        aliases:
+          - node2
+    restart: unless-stopped
+
+  node3:
+    image: hyperledger/besu:latest
+    container_name: besu-node3-deptC
+    volumes:
+      - ./genesis/genesis.json:/opt/besu/genesis.json:ro
+      - ./validators/node3/config.toml:/opt/besu/config.toml:ro
+      - ./validators/node3/data:/opt/besu/data
+    command:
+      - --config-file=/opt/besu/config.toml
+    depends_on:
+      - node1
+    networks:
+      besu-net:
+        aliases:
+          - node3
+    restart: unless-stopped
+
+  node4:
+    image: hyperledger/besu:latest
+    container_name: besu-node4-centralAdmin
+    volumes:
+      - ./genesis/genesis.json:/opt/besu/genesis.json:ro
+      - ./validators/node4/config.toml:/opt/besu/config.toml:ro
+      - ./validators/node4/data:/opt/besu/data
+    command:
+      - --config-file=/opt/besu/config.toml
+    depends_on:
+      - node1
+    networks:
+      besu-net:
+        aliases:
+          - node4
+    restart: unless-stopped
+
+networks:
+  besu-net:
+    driver: bridge

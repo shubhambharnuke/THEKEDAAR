@@ -1,0 +1,17 @@
+# Node 4 Configuration - Central Administration
+genesis-file="/opt/besu/genesis.json"
+data-path="/opt/besu/data"
+
+p2p-enabled=true
+p2p-host="node4"
+p2p-port=30303
+bootnodes=["enode://6f8a80d14311c39f35f516fa6644a54e6b38c141074109a30973d07837657067ec1445b59557f10a02d2719fdb8238b336572569da2372e54d4e66cb34299b70@node1:30303"]
+
+rpc-http-enabled=true
+rpc-http-host="0.0.0.0"
+rpc-http-port=8545
+rpc-http-api=["ETH", "NET", "QBFT", "WEB3"]
+rpc-http-cors-origins=["*"]
+host-allowlist=["*"]
+
+min-gas-price=0

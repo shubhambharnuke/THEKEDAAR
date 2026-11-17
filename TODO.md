@@ -303,6 +303,85 @@ Preserve relevant existing files and deployment documentation unless they confli
 
 ---
 
+## Phase I — Permissioned Besu Network & On-Chain Resource Management
+
+> **Implementation Principle:**  
+> The existing frontend pages, layouts, styles, and minimalist graphite/paper UI/UX remain 100% intact.  
+> Frontend updates are strictly restricted to essential Web3 interactions: wallet connection header component, on-chain transaction status indicator, and calling smart contract write/read methods instead of purely DB CRUD operations.  
+> **Source of Truth:** Hyperledger Besu QBFT blockchain is the sole authoritative state machine for identity, resources, bookings, and approvals. SQLite and FastAPI serve strictly as an event-indexed, rebuildable read model.
+
+### TASK-I01: 4-Node Hyperledger Besu QBFT Cluster Setup
+- [x] **I01.1 — QBFT Genesis Configuration**: Created `infrastructure/besu/genesis/genesis.json` configured for QBFT consensus with a 1-second block period, chainId 1337, extraData RLP-encoded validators, and pre-allocated zero-gas balances.
+- [x] **I01.2 — Validator Node Configurations & Keys**: Generated 4 independent validator key pairs and created isolated configuration files (`config.toml`) with unique persistent data paths and distinct validator addresses for:
+  - Validator 1 (Department A: `0xfe3b557e8fb62b89f4916b721be55ceb828dbd73`)
+  - Validator 2 (Department B: `0x627306090abab3a6e1400e9345bc60c78a8bef57`)
+  - Validator 3 (Department C: `0x2c36ffd7da7a0606c2ae6077c5a618f17805ab61`)
+  - Validator 4 (Central Administration: `0xa0ee7a142d267c1f36714e4a8f75612f20a79720`)
+- [x] **I01.3 — Besu Docker Compose Orchestration**: Created `infrastructure/besu/docker-compose.yml` orchestrating the 4 Besu nodes with static peering, isolated persistent volumes, health checks, restart policies, and exposing JSON-RPC (port 8545) on localhost.
+- [ ] **I01.4 — Consensus & Fault Tolerance Verification**: Start the cluster and run an automated script verifying: (a) QBFT block finalization across all 4 nodes, (b) consistent state across nodes, (c) consensus continuation when 1 validator is stopped, and (d) successful resynchronization when the stopped node restarts.
+
+### TASK-I02: Smart Contract Architecture (Hardhat + OpenZeppelin)
+- [x] **I02.1 — CollegeAccessControl.sol**: Implemented role-based access control inheriting OpenZeppelin `AccessControl`:
+  - Roles: `STUDENT`, `CLUB_MEMBER`, `FACULTY`, `DEPARTMENT_AUTHORITY`, `DEPARTMENT_ADMIN`, `CENTRAL_ADMIN`, `NETWORK_GOVERNOR`.
+  - Enforced explicit role-admin hierarchy: users cannot self-assign; `STUDENT`/`CLUB_MEMBER` granted by registration authority; `DEPARTMENT_AUTHORITY`/`ADMIN` granted by central admin; `CENTRAL_ADMIN`/`NETWORK_GOVERNOR` managed by governance.
+  - Implemented wallet suspension/reinstatement (`isSuspended`) and department-scoped verification (`getDepartment(address)`).
+- [x] **I02.2 — CollegeAccessControl Unit Tests**: Wrote Hardhat tests for registration, department authorization, role hierarchy, revoking permissions, wallet suspension enforcement across privileged functions, and unauthorized caller rejections. (6 passing)
+- [x] **I02.3 — ResourceRegistry.sol**: Implemented authoritative on-chain resource registry with unique resource IDs, owning department, metadata hash, active/inactive state, booking limits (min/max duration), and department-level management permissions.
+- [x] **I02.4 — ResourceRegistry Unit Tests**: Wrote Hardhat tests for resource registration, department ownership checks, metadata updates, deactivation safeguards, and verifying that deactivation preserves historical records while preventing new bookings. (4 passing)
+- [x] **I02.5 — BookingManager.sol**: Implemented atomic double-booking prevention engine:
+  - 15-minute fixed slot indexing with half-open intervals $[start, end)$ aligned to 15-minute boundaries (`startTime < endTime`, duration bounds).
+  - Slot storage mapping `(resourceId, slotTimestamp) => bookingId`.
+  - Atomic slot reservation and exact state machine (`NONE`, `PENDING`, `CONFIRMED`, `REJECTED`, `CANCELLED`, `EXPIRED`, `COMPLETED`).
+  - Atomic modification: release old slots and reserve new slots in a single transaction (reverting if conflicting).
+  - Cancellation & expiry: permissionless or keeper-callable `expireBooking(bookingId)` after deadline releasing slots.
+- [x] **I02.6 — BookingManager Concurrency & Unit Tests**: Wrote Hardhat tests for valid bookings, overlapping conflicting bookings (revert verification), adjacent reservations (must pass), cancellations, expired slot release, and atomic modification tests. (5 passing)
+- [x] **I02.7 — ApprovalManager.sol**: Implemented multi-authority approval workflow:
+  - Enforce multi-stage approvals (e.g. Department Authority $\rightarrow$ Central Admin).
+  - Prevent self-approval, duplicate decisions, and unauthorized cross-department approvals.
+  - On-chain atomic confirmation: upon satisfying final required approval, `ApprovalManager` makes an on-chain contract-to-contract call to `BookingManager.confirmBooking(...)`. If confirmation fails, the approval transaction reverts atomically.
+- [x] **I02.8 — ApprovalManager Unit Tests**: Wrote Hardhat tests preventing self-approval, duplicate decisions, out-of-order stages, unauthorized cross-department approvals, and verifying atomic cross-contract confirmation. (3 passing)
+- [x] **I02.9 — Upgrade DocumentRegistry.sol & SystemGovernance.sol**: Upgraded `DocumentRegistry.sol` to support document revocation while preserving original registration history, and implemented `SystemGovernance.sol` for multi-party institutional policy adjustments.
+- [x] **I02.10 — Deployment & ABI Export Script**: Wrote Hardhat deployment script deploying all 6 contracts to the Besu QBFT network and exporting contract ABIs and deployed addresses to `apps/web/lib/contracts/` and `backend/app/blockchain/abi/`. Verified via `scripts/deploy-all.ts`.
+- [x] **I02.11 — Role-Admin Hierarchy & Wallet Suspension Tests**: Comprehensive test suite verifying that suspended wallets fail all privileged contract operations even if holding roles.
+- [x] **I02.12 — Permitted Booking Status Transition Invariant Tests**: Verified all valid and invalid transitions across all 7 booking states.
+- [x] **I02.13 — Resource Deactivation Policy Tests**: Verified existing confirmed bookings remain valid for historical audits when a resource is deactivated.
+- [x] **I02.14 — Booking Modification Reapproval Rules**: Verified that modifying critical booking parameters (dates, slots, venue) resets status to `PENDING` and preserves atomicity.
+- [x] **I02.15 — Cross-Contract Authorization & Atomicity Tests**: Verified that `BookingManager.confirmBooking` rejects calls from any address other than the authorized `ApprovalManager` contract.
+
+### TASK-I03: Blockchain Event Indexer & Read Database Sync
+- [ ] **I03.1 — Blockchain Event Indexer Service**: Implement a dedicated TypeScript/Viem event indexer service connecting to the Besu JSON-RPC endpoint.
+- [ ] **I03.2 — Complete Event Subscriptions & Database Read Model Sync**: Subscribe to and index all state-changing events:
+  - `CollegeAccessControl`: `UserRegistered`, `RoleGranted`, `RoleRevoked`, `WalletSuspended`, `WalletReinstated`, `DepartmentUpdated`
+  - `ResourceRegistry`: `ResourceRegistered`, `ResourceUpdated`, `ResourceDeactivated`, `ResourceReactivated`
+  - `BookingManager`: `BookingRequested`, `BookingConfirmed`, `BookingRejected`, `BookingCancelled`, `BookingModified`, `BookingExpired`, `BookingCompleted`
+  - `ApprovalManager`: `ApprovalRecorded`, `RejectionRecorded`, `ApprovalPolicyUpdated`
+  - `DocumentRegistry`: `DocumentRegistered`, `DocumentRevoked`
+  - `SystemGovernance`: `PolicyUpdated`, `GovernanceActionExecuted`
+  Update the local SQLite database models (`resources`, `events`, `bookings`, `decision_history`, `blockchain_records`) idempotently.
+- [ ] **I03.3 — Idempotent Block Processing & Replay**: Persist the last processed block number; deduplicate events using `(txHash, logIndex)`; safely recover missed blocks upon restart.
+- [ ] **I03.4 — Database Reconstruction from Blockchain History**: Implement and verify a `rebuild-database` CLI command: deleting the SQLite database and replaying events from genesis block 0 fully recovers the entire institutional resource and booking history.
+- [ ] **I03.5 — Indexer Health & Sync Monitoring**: Expose health status and current indexed block height to ensure dashboards reflect finalized on-chain data.
+
+### TASK-I04: Essential Frontend Web3 Integration (Preserving UI/UX)
+- [ ] **I04.1 — Wallet Connection Header Pill**: Integrate Wagmi + Viem in `apps/web` with a clean, unobtrusive "Connect Wallet / Wallet Connected" badge in the navigation bar matching the existing graphite/paper style.
+- [ ] **I04.2 — On-Chain Role & Department Detection**: Read the connected wallet's assigned role and department directly from `CollegeAccessControl`; display appropriate warnings if the connected wallet is unregistered or suspended.
+- [ ] **I04.3 — Transaction Status Indicator Component**: Create a reusable `TransactionStatus` component displaying exact transaction lifecycle (`Awaiting Signature` $\rightarrow$ `Submitted` $\rightarrow$ `Pending Consensus` $\rightarrow$ `Confirmed in Block #X` / `Reverted` / `Rejected by Wallet`) without changing existing page layouts.
+- [ ] **I04.4 — Wire Club Event Booking to Smart Contract**: Update the Club event submission form (`/club/events/new`) to request user wallet signature for `BookingManager.requestBooking(...)`, enforcing 15-minute slot bounds and verifying receipt confirmation before displaying success.
+- [ ] **I04.5 — Wire Authority Decision to Smart Contract**: Update Authority approval and rejection actions (`/authority/approvals/[id]`) to sign `ApprovalManager.recordApproval(...)` or `recordRejection(...)` directly on-chain.
+- [ ] **I04.6 — Wire Document Revocation to Smart Contract**: Add a revocation action for authorized issuers on `/verify` and letter views calling `DocumentRegistry.revokeDocument(...)`.
+- [ ] **I04.7 — Network & Account Switching Guard**: Handle wallet account switches, wrong chain IDs (must be Besu 1337), and disconnected states gracefully with inline alerts.
+- [ ] **I04.8 — On-Chain State Refresh Post-Confirmation**: Trigger indexer sync or poll contract state immediately upon block receipt to update local views seamlessly.
+
+### TASK-I05: End-to-End System Demonstration & Verification
+- [ ] **I05.1 — Multi-Department Concurrency & Double-Booking Demonstration**: Run an end-to-end integration test demonstrating two distinct wallets attempting to reserve the same resource time window; verify that the first succeeds and the second transaction reverts on-chain.
+- [ ] **I05.2 — Multi-Authority Approval Flow Demonstration**: Run a complete end-to-end workflow: Club booking request $\rightarrow$ Department Authority on-chain approval $\rightarrow$ Central Admin on-chain approval $\rightarrow$ Automated cross-contract on-chain booking confirmation $\rightarrow$ UI reflection.
+- [ ] **I05.3 — Fault Tolerance & Consensus Live Test**: Stop one validator node during active booking submissions; demonstrate that blocks continue to be forged and finalized by the remaining 3 validators.
+- [ ] **I05.4 — Unauthorized, Suspended, & Cross-Department Security Tests**: Demonstrate rejections on-chain when: (a) a suspended wallet attempts to book, (b) Department B attempts to approve Department A's booking, (c) an applicant attempts to self-approve.
+- [ ] **I05.5 — Booking Expiry & Automatic Slot Release Test**: Demonstrate a pending booking exceeding its approval deadline, triggering expiry, and releasing its reserved slots on-chain.
+- [ ] **I05.6 — Complete Read-Model Rebuild Test**: Delete `backend/data/thekedar.db`, run indexer replay from block 0, and verify that the full institutional state matches the smart contracts.
+
+---
+
 ## 4. Execution Rules
 
 1. Work sequentially: complete and verify one task before starting the next dependent task.
@@ -317,5 +396,13 @@ Preserve relevant existing files and deployment documentation unless they confli
 10. When blocked, record the exact blocker and the next action instead of repeatedly rescanning the repository.
 11. Read this file at the beginning of each development session and continue from the first unresolved task.
 12. Do not begin deferred deployment work while local acceptance remains incomplete.
+13. **On-chain authority:** No backend API, database operation, or frontend state update may independently change authoritative resource, booking, approval, or access-control state.
+14. **Contract security:** Every privileged contract function must enforce role, department, suspension, and state-transition checks on-chain.
+15. **Transaction verification:** A transaction hash or wallet submission is not success. Verify the receipt, execution status, and resulting contract state.
+16. **Read-model integrity:** The indexer must be idempotent and capable of rebuilding the database from blockchain history.
+17. **Network separation:** Local Besu QBFT and public Sepolia must use separate configurations, deployments, addresses, and environment variables.
+18. **No accidental UI redesign:** Existing pages, components, layouts, styling, and user flows must remain unchanged unless a specific Web3 interaction requires a targeted modification.
+19. **Deployment evidence:** Every completed infrastructure or contract task must include reproducible commands, test output, and relevant configuration evidence.
+20. **No premature completion:** Do not mark a task complete because files were created. Mark it complete only after its acceptance test passes.
 
-**Definition of done:** THEKEDAR runs on the local Windows PC with Next.js, FastAPI, SQLite, local authentication, real booking/approval workflows, and verified Ethereum Sepolia integration.
+**Definition of done:** THEKEDAR runs locally on Windows with Next.js, FastAPI, SQLite, local authentication, a 4-validator Hyperledger Besu QBFT network, and verified on-chain resource booking and multi-authority approval workflows. Sepolia deployment is a separate, explicitly scoped target and must not replace local QBFT verification.
