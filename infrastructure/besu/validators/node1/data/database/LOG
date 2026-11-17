@@ -1734,3 +1734,19 @@
 2026/11/17-20:09:28.223759 140319748204224 [/db_impl/db_impl.cc:990] Storing 217 stats with timestamp 1794946168 to in-memory stats history
 2026/11/17-20:09:28.223778 140319748204224 [/db_impl/db_impl.cc:1003] [Pre-GC] In-memory stats history size: 72877 bytes, slice count: 7
 2026/11/17-20:09:28.223780 140319748204224 [/db_impl/db_impl.cc:1012] [Post-GC] In-memory stats history size: 72877 bytes, slice count: 7
+2026/11/17-20:19:28.224403 140319748204224 [/db_impl/db_impl.cc:934] ------- PERSISTING STATS -------
+2026/11/17-20:19:28.225071 140319748204224 [/db_impl/db_impl.cc:990] Storing 217 stats with timestamp 1794946768 to in-memory stats history
+2026/11/17-20:19:28.225092 140319748204224 [/db_impl/db_impl.cc:1003] [Pre-GC] In-memory stats history size: 83288 bytes, slice count: 8
+2026/11/17-20:19:28.225093 140319748204224 [/db_impl/db_impl.cc:1012] [Post-GC] In-memory stats history size: 83288 bytes, slice count: 8
+2026/11/17-20:29:28.225345 140319748204224 [/db_impl/db_impl.cc:934] ------- PERSISTING STATS -------
+2026/11/17-20:29:28.226061 140319748204224 [/db_impl/db_impl.cc:990] Storing 217 stats with timestamp 1794947368 to in-memory stats history
+2026/11/17-20:29:28.226075 140319748204224 [/db_impl/db_impl.cc:1003] [Pre-GC] In-memory stats history size: 93699 bytes, slice count: 9
+2026/11/17-20:29:28.226076 140319748204224 [/db_impl/db_impl.cc:1012] [Post-GC] In-memory stats history size: 93699 bytes, slice count: 9
+2026/11/17-20:39:28.226358 140319748204224 [/db_impl/db_impl.cc:934] ------- PERSISTING STATS -------
+2026/11/17-20:39:28.227602 140319748204224 [/db_impl/db_impl.cc:990] Storing 217 stats with timestamp 1794947968 to in-memory stats history
+2026/11/17-20:39:28.227689 140319748204224 [/db_impl/db_impl.cc:1003] [Pre-GC] In-memory stats history size: 104110 bytes, slice count: 10
+2026/11/17-20:39:28.227693 140319748204224 [/db_impl/db_impl.cc:1012] [Post-GC] In-memory stats history size: 104110 bytes, slice count: 10
+2026/11/17-20:49:28.229333 140319748204224 [/db_impl/db_impl.cc:934] ------- PERSISTING STATS -------
+2026/11/17-20:49:28.230882 140319748204224 [/db_impl/db_impl.cc:990] Storing 217 stats with timestamp 1794948568 to in-memory stats history
+2026/11/17-20:49:28.231147 140319748204224 [/db_impl/db_impl.cc:1003] [Pre-GC] In-memory stats history size: 114521 bytes, slice count: 11
+2026/11/17-20:49:28.231152 140319748204224 [/db_impl/db_impl.cc:1012] [Post-GC] In-memory stats history size: 114521 bytes, slice count: 11

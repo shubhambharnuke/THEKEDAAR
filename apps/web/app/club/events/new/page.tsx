@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { ArrowLeft, ArrowRight, Check, CheckCircle, AlertTriangle, Building, Calendar, Clock, Trash2 } from "lucide-react";
 import { thekedarApi } from "@/lib/api";
 import { useSession } from "@/lib/auth-client";
+import { sendMetaMaskBookingTx } from "@/lib/metamask-tx";
 
 interface ResourceOption {
   id: number;
@@ -206,6 +207,18 @@ export default function CreateEventPage() {
     setSubmitting(true);
 
     try {
+      // Optional interactive MetaMask blockchain transaction
+      if (typeof window !== "undefined" && (window as any).ethereum) {
+        try {
+          const firstRes = selectedResources[0];
+          const startEpoch = Math.floor(new Date(firstRes.start_time).getTime() / 1000);
+          const endEpoch = Math.floor(new Date(firstRes.end_time).getTime() / 1000);
+          await sendMetaMaskBookingTx(firstRes.resource_id, startEpoch, endEpoch);
+        } catch (walletErr: any) {
+          console.warn("MetaMask transaction cancelled or skipped by user:", walletErr);
+        }
+      }
+
       const payload = {
         title: title.trim(),
         description: description.trim() || undefined,

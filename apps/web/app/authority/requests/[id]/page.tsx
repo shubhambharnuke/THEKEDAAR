@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { thekedarApi } from "@/lib/api";
 import { useSession } from "@/lib/auth-client";
+import { sendMetaMaskApprovalTx } from "@/lib/metamask-tx";
 
 export default function AuthorityReviewPage() {
   const params = useParams();
@@ -116,6 +117,14 @@ export default function AuthorityReviewPage() {
     setSubmittingAction(action);
 
     try {
+      if (action === "APPROVE" && typeof window !== "undefined" && (window as any).ethereum) {
+        try {
+          await sendMetaMaskApprovalTx(Number(requestId), remarks || "Approved by authority");
+        } catch (walletErr: any) {
+          console.warn("MetaMask approval cancelled or skipped by authority:", walletErr);
+        }
+      }
+
       await thekedarApi.submitDecision(Number(requestId), action, remarks);
 
       if (action === "APPROVE") {
