@@ -1,7 +1,7 @@
-import deployments from "./deployments.json";
-import BookingManagerArtifact from "./BookingManager.json";
-import ApprovalManagerArtifact from "./ApprovalManager.json";
-import DocumentRegistryArtifact from "./DocumentRegistry.json";
+import deployments from "./contracts/deployments.json";
+import BookingManagerArtifact from "./contracts/BookingManager.json";
+import ApprovalManagerArtifact from "./contracts/ApprovalManager.json";
+import DocumentRegistryArtifact from "./contracts/DocumentRegistry.json";
 
 export const BESU_CHAIN_ID_HEX = "0x539"; // 1337 in hex
 
